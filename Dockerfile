@@ -1,7 +1,17 @@
 # ---- build stage ----
 FROM gradle:8.7-jdk17 AS build
 WORKDIR /app
+
+# Copy Gradle files first (for caching)
+COPY build.gradle.kts settings.gradle.kts ./
+COPY gradle ./gradle
+COPY gradlew ./
+
 COPY . .
+
+# Ensure wrapper is executable
+RUN chmod +x ./gradlew
+
 RUN gradle :server:buildFatJar --no-daemon
 
 # ---- run stage ----
