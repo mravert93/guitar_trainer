@@ -12,7 +12,7 @@ COPY . .
 # Ensure wrapper is executable
 RUN chmod +x ./gradlew
 
-RUN gradle :server:buildFatJar --no-daemon
+RUN ./gradlew :server:buildFatJar --no-daemon
 
 # ---- run stage ----
 FROM eclipse-temurin:17-jre
