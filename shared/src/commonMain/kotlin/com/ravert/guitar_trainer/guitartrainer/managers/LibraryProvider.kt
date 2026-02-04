@@ -38,7 +38,7 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 class LibraryProvider(
-    private val baseUrl: String = "http://0.0.0.0:8081", // your Ktor server
+    private val baseUrl: String = "https://guitar-trainer.onrender.com", // "http://0.0.0.0:8081" Ktor server
     private val client: HttpClient = httpClient,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
 ) {

@@ -50,7 +50,7 @@ actual fun RemoteImageCircle(
 
         try {
             // Fetch the image as binary
-            val proxied = "http://0.0.0.0:8081/imageProxy?url=${encodeUrlComponent(imageUrl)}"
+            val proxied = "https://guitar-trainer.onrender.com/imageProxy?url=${encodeUrlComponent(imageUrl)}"
             val response = window.fetch(proxied).await()
             if (!response.ok) {
                 console.warn("Image fetch failed: ${response.status} ${response.statusText}")
