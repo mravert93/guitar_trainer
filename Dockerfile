@@ -6,6 +6,7 @@ WORKDIR /app
 COPY build.gradle.kts settings.gradle.kts ./
 COPY gradle ./gradle
 COPY gradlew ./
+COPY gradle.properties ./
 
 COPY . .
 

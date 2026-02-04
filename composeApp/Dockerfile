@@ -6,6 +6,7 @@ WORKDIR /app
 COPY gradlew ./
 COPY gradle ./gradle
 COPY settings.gradle.kts build.gradle.kts ./
+COPY gradle.properties ./
 # If you have version catalogs:
 COPY gradle/libs.versions.toml gradle/libs.versions.toml
 
