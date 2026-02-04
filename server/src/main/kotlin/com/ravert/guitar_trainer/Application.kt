@@ -39,7 +39,7 @@ fun Application.module() {
     // CORS
     install(CORS) {
         // For dev: allow your web app origin
-        allowHost("https://guitar-trainer.onrender.com", schemes = listOf("https"))
+        allowHost("guitar-trainer.onrender.com", schemes = listOf("https"))
         allowHost("localhost:8080", schemes = listOf("http"))
         allowHost("127.0.0.1:8080", schemes = listOf("http"))
         allowHost("0.0.0.0:8080")
