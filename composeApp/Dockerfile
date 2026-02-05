@@ -19,13 +19,22 @@ COPY composeApp ./composeApp
 # Build web bundle
 RUN ./gradlew :composeApp:jsBrowserProductionWebpack --no-daemon
 
-RUN ./gradlew :composeApp:jsBrowserProductionWebpack --no-daemon && \
-    echo "---- dist tree ----" && \
-    find /app/composeApp/build -maxdepth 6 -type f \( -name "index.html" -o -name "*.js" \) -print
+#RUN ./gradlew :composeApp:jsBrowserProductionWebpack --no-daemon && \
+#    echo "---- dist tree ----" && \
+#    find /app/composeApp/build -maxdepth 6 -type f \( -name "index.html" -o -name "*.js" \) -print
 
 
 # ---- run stage ----
+# ---- run stage ----
 FROM nginx:alpine
-COPY --from=build /app/composeApp/build/dist/js/productionExecutable /usr/share/nginx/html
+
+# 1) index.html (and any static resources)
+COPY --from=build /app/composeApp/build/processedResources/js/main/ /usr/share/nginx/html/
+
+# 2) webpack JS bundle + chunks
+COPY --from=build /app/composeApp/build/kotlin-webpack/js/productionExecutable/ /usr/share/nginx/html/
+
+# SPA routing
 COPY composeApp/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
+
