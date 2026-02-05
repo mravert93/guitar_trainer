@@ -104,6 +104,15 @@ fun Application.configureImportRoutes(
                         artistName = artistName.split(" & ").first()
                     }
 
+                    val existingArtist = existingArtists[artistName]
+                    if (existingArtist != null) {
+                        val existingSong = existingSongs[existingArtist.uuid]?.firstOrNull { it.name == songName }
+                        if (existingSong != null) {
+                            // Both artist and song already exist in db, skip
+                            continue
+                        }
+                    }
+
                     val lookupResult = deezerLookupTrack(
                         httpClient,
                         songName,
@@ -153,11 +162,6 @@ fun Application.configureImportRoutes(
                         )
                         newSongs.add(createdSong)
                         songsUpserted++
-                    } else {
-                        // update docUrl if changed
-                        if (existingSong.docUrl != urlPrefix) {
-                            repo.updateSong(UUID.fromString(existingSong.uuid), docUrl = urlPrefix)
-                        }
                     }
                     i++
                 } catch (t: Throwable) {
