@@ -32,10 +32,16 @@ object DatabaseFactory {
 //            isAutoCommit = false
 //            transactionIsolation = "TRANSACTION_REPEATABLE_READ"
 //        }
+
         val dataSource = HikariDataSource(config)
         Database.connect(dataSource)
 
         transaction {
+            SchemaUtils.drop(
+                ArtistsTable,
+                AlbumsTable,
+                SongsTable
+            )
             SchemaUtils.createMissingTablesAndColumns(
                 ArtistsTable,
                 AlbumsTable,

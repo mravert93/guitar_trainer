@@ -80,7 +80,7 @@ fun Application.configureImportRoutes(
 
             // New data to insert/upsert into database
             val newArtists = arrayListOf<NewArtist>()
-            val newAlbums = arrayListOf<NewAlbum>()
+            val newAlbums = hashMapOf<String, ArrayList<NewAlbum>>()
             val newSongs = arrayListOf<NewSong>()
 
             val droppedRows = rows.drop(1)
@@ -113,6 +113,7 @@ fun Application.configureImportRoutes(
                         }
                     }
 
+                    // Look up song / artist details
                     val lookupResult = deezerLookupTrack(
                         httpClient,
                         songName,
@@ -145,13 +146,24 @@ fun Application.configureImportRoutes(
                             ?.first { it.name == album }
                             ?.uuid
                             ?: run {
-                                val created = NewAlbum(
-                                    artistUuid = UUID.fromString(artistUuid),
-                                    name = album,
-                                    imageUrl = artwork
-                                )
-                                newAlbums.add(created)
-                                created.uuid.toString()
+                                val newlyAddedAlbum = newAlbums[artistUuid]?.firstOrNull { it.name == album }
+
+                                if (newlyAddedAlbum != null) {
+                                    newlyAddedAlbum.uuid.toString()
+                                } else {
+                                    val created = NewAlbum(
+                                        artistUuid = UUID.fromString(artistUuid),
+                                        name = album,
+                                        imageUrl = artwork
+                                    )
+
+                                    if (newAlbums.containsKey(artistUuid)) {
+                                        newAlbums[artistUuid]!!.add(created)
+                                    } else {
+                                        newAlbums[artistUuid] = arrayListOf(created)
+                                    }
+                                    created.uuid.toString()
+                                }
                             }
 
                         val createdSong = NewSong(
@@ -176,7 +188,7 @@ fun Application.configureImportRoutes(
 
             // Okay now do all the inserts
             repo.batchInsertArtist(newArtists)
-            repo.batchInsertAlbum(newAlbums)
+            repo.batchInsertAlbum(newAlbums.values.flatten())
             repo.batchInsertSong(newSongs)
 
             call.respond(ImportResult(artistsUpserted, songsUpserted, skipped, errors))
