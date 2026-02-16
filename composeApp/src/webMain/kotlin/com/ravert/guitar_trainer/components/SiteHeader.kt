@@ -27,17 +27,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import guitar_trainer.composeapp.generated.resources.Res
 import guitar_trainer.composeapp.generated.resources.dclogo
 import org.jetbrains.compose.resources.painterResource
 
+enum class SelectedTab {
+    HOME,
+    ARTISTS,
+    TABS,
+    GEAR,
+    ABOUT
+}
 @Composable
 fun SiteHeader(
+    selectedTab: SelectedTab,
+    onHomeClick: () -> Unit,
     onArtistsClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -57,8 +71,20 @@ fun SiteHeader(
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 20.dp)
                 .clickable {
-                    openLink("https://www.danielchaveztutorials.com/")
-                }
+                    onHomeClick()
+                }.drawBehind {
+                    if (selectedTab == SelectedTab.HOME) {
+                        val strokeWidth = 1.dp.toPx()
+                        val y = size.height - 2.dp.toPx()  // distance from bottom
+
+                        drawLine(
+                            color = Color.Black,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth
+                        )
+                    }
+            },
         )
 
         Text(
@@ -67,6 +93,18 @@ fun SiteHeader(
             modifier = Modifier.padding(horizontal = 20.dp)
                 .clickable {
                     onArtistsClick()
+                }.drawBehind {
+                    if (selectedTab == SelectedTab.ARTISTS) {
+                        val strokeWidth = 1.dp.toPx()
+                        val y = size.height - 2.dp.toPx()  // distance from bottom
+
+                        drawLine(
+                            color = Color.Black,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth
+                        )
+                    }
                 }
         )
 
@@ -76,6 +114,18 @@ fun SiteHeader(
             modifier = Modifier.padding(horizontal = 20.dp)
                 .clickable {
                     onTabsClick()
+                }.drawBehind {
+                    if (selectedTab == SelectedTab.TABS) {
+                        val strokeWidth = 1.dp.toPx()
+                        val y = size.height - 2.dp.toPx()  // distance from bottom
+
+                        drawLine(
+                            color = Color.Black,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth
+                        )
+                    }
                 }
         )
 
@@ -84,7 +134,19 @@ fun SiteHeader(
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 20.dp)
                 .clickable {
-                    openLink("https://www.danielchaveztutorials.com/gear")
+                    onGearClick()
+                }.drawBehind {
+                    if (selectedTab == SelectedTab.GEAR) {
+                        val strokeWidth = 1.dp.toPx()
+                        val y = size.height - 2.dp.toPx()  // distance from bottom
+
+                        drawLine(
+                            color = Color.Black,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth
+                        )
+                    }
                 }
         )
 
@@ -102,7 +164,19 @@ fun SiteHeader(
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(horizontal = 20.dp)
                 .clickable {
-                    openLink("https://www.danielchaveztutorials.com/about")
+                    onAboutClick()
+                }.drawBehind {
+                    if (selectedTab == SelectedTab.ABOUT) {
+                        val strokeWidth = 1.dp.toPx()
+                        val y = size.height - 2.dp.toPx()  // distance from bottom
+
+                        drawLine(
+                            color = Color.Black,
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokeWidth
+                        )
+                    }
                 }
         )
 
@@ -125,9 +199,13 @@ fun SiteHeader(
 
 @Composable
 fun PhoneSiteHeader(
+    selectedTab: SelectedTab,
+    onHomeClick: () -> Unit,
     onArtistsClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -147,15 +225,17 @@ fun PhoneSiteHeader(
         Text(
             text = "Home",
             style = MaterialTheme.typography.titleMedium,
+            textDecoration = if (selectedTab == SelectedTab.HOME) TextDecoration.Underline else TextDecoration.None,
             modifier = Modifier.padding(horizontal = 20.dp)
                 .clickable {
-                    openLink("https://www.danielchaveztutorials.com/")
+                    onHomeClick()
                 }
         )
 
         Text(
             text = "Artists",
             style = MaterialTheme.typography.titleMedium,
+            textDecoration = if (selectedTab == SelectedTab.ARTISTS) TextDecoration.Underline else TextDecoration.None,
             modifier = Modifier.padding(horizontal = 20.dp)
                 .clickable {
                     onArtistsClick()
@@ -185,7 +265,7 @@ fun PhoneSiteHeader(
                     text = { Text("Gear") },
                     onClick = {
                         menuExpanded = false
-                        openLink("https://www.danielchaveztutorials.com/gear")
+                        onGearClick()
                     }
                 )
 
@@ -201,7 +281,7 @@ fun PhoneSiteHeader(
                     text = { Text("About") },
                     onClick = {
                         menuExpanded = false
-                        openLink("https://www.danielchaveztutorials.com/about")
+                        onAboutClick()
                     }
                 )
 

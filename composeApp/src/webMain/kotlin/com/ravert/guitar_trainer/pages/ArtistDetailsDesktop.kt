@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ravert.guitar_trainer.components.ImageBlock
+import com.ravert.guitar_trainer.components.SelectedTab
 import com.ravert.guitar_trainer.components.SiteHeader
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Album
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Artist
@@ -38,11 +39,14 @@ import com.ravert.guitar_trainer.guitartrainer.managers.LibraryProvider
 fun ArtistDetailsScreen(
     artistId: String,
     libraryProvider: LibraryProvider,
+    onHomeClick: () -> Unit,
     onSongClick: (String) -> Unit,
     onAlbumClick: (String, String) -> Unit,
     onArtistsClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(
@@ -55,22 +59,28 @@ fun ArtistDetailsScreen(
             ArtistDetailsPhone(
                 artistId = artistId,
                 libraryProvider = libraryProvider,
+                onHomeClick = onHomeClick,
                 onSongClick = onSongClick,
                 onAlbumClick = onAlbumClick,
                 onArtistsClick = onArtistsClick,
                 onTabsClick = onTabsClick,
                 onAdminClick = onAdminClick,
+                onGearClick = onGearClick,
+                onAboutClick = onAboutClick,
                 modifier = modifier
             )
         } else {
             ArtistDetailsDesktop(
                 artistId = artistId,
                 libraryProvider = libraryProvider,
+                onHomeClick = onHomeClick,
                 onSongClick = onSongClick,
                 onAlbumClick = onAlbumClick,
                 onArtistsClick = onArtistsClick,
                 onTabsClick = onTabsClick,
                 onAdminClick = onAdminClick,
+                onGearClick = onGearClick,
+                onAboutClick = onAboutClick,
                 modifier = modifier
             )
         }
@@ -82,11 +92,14 @@ fun ArtistDetailsScreen(
 fun ArtistDetailsDesktop(
     artistId: String,
     libraryProvider: LibraryProvider,
+    onHomeClick: () -> Unit,
     onSongClick: (String) -> Unit,
     onAlbumClick: (String, String) -> Unit,
     onArtistsClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -109,9 +122,13 @@ fun ArtistDetailsDesktop(
         modifier = modifier.fillMaxSize(),
     ) {
         SiteHeader(
+            selectedTab = SelectedTab.ARTISTS,
+            onHomeClick = onHomeClick,
             onTabsClick = onTabsClick,
             onArtistsClick = onArtistsClick,
             onAdminClick = onAdminClick,
+            onGearClick = onGearClick,
+            onAboutClick = onAboutClick,
         )
 
         Column(

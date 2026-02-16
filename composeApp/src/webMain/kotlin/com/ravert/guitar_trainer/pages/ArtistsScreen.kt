@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextDecoration
 import com.ravert.guitar_trainer.components.PhoneSiteHeader
+import com.ravert.guitar_trainer.components.SelectedTab
 import com.ravert.guitar_trainer.components.SiteHeader
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Artist
 import com.ravert.guitar_trainer.guitartrainer.managers.LibraryProvider
@@ -34,9 +35,12 @@ import com.ravert.guitar_trainer.guitartrainer.managers.LibraryProvider
 fun ArtistsScreen(
     libraryProvider: LibraryProvider,
     onArtistClick: (String) -> Unit,
+    onHomeClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
     onArtistsClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -65,15 +69,23 @@ fun ArtistsScreen(
         Column {
             if (isPhone) {
                 PhoneSiteHeader(
+                    selectedTab = SelectedTab.ARTISTS,
+                    onHomeClick = onHomeClick,
                     onTabsClick = onTabsClick,
                     onArtistsClick = onArtistsClick,
-                    onAdminClick = onAdminClick
+                    onAdminClick = onAdminClick,
+                    onGearClick = onGearClick,
+                    onAboutClick = onAboutClick,
                 )
             } else {
                 SiteHeader(
+                    selectedTab = SelectedTab.ARTISTS,
+                    onHomeClick = onHomeClick,
                     onTabsClick = onTabsClick,
                     onArtistsClick = onArtistsClick,
-                    onAdminClick = onAdminClick
+                    onAdminClick = onAdminClick,
+                    onGearClick = onGearClick,
+                    onAboutClick = onAboutClick,
                 )
             }
 

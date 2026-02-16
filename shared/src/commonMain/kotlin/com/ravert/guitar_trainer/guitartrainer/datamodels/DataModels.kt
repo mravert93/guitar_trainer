@@ -27,3 +27,12 @@ data class Song(
     val bpm: Int,
     val docUrl: String,
 )
+
+@Serializable
+data class GearItem(
+    val uuid: String,
+    val name: String,
+    val brand: String,
+    val imageUrl: String,
+    val buyLink: String,
+)

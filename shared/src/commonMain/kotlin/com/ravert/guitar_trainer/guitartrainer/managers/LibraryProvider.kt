@@ -4,6 +4,7 @@ package com.ravert.guitar_trainer.guitartrainer.managers
 
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Album
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Artist
+import com.ravert.guitar_trainer.guitartrainer.datamodels.GearItem
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Song
 import com.ravert.guitar_trainer.guitartrainer.datamodels.api.CreateAlbumRequest
 import com.ravert.guitar_trainer.guitartrainer.datamodels.api.CreateArtistRequest
@@ -45,6 +46,7 @@ class LibraryProvider(
     private val _artists = MutableStateFlow<List<Artist>>(emptyList())
     private val _albums  = MutableStateFlow<List<Album>>(emptyList())
     private val _songs   = MutableStateFlow<List<Song>>(emptyList())
+    private val _gear = MutableStateFlow<List<GearItem>>(emptyList())
 
     val artists: StateFlow<List<Artist>> =
         _artists.map { it.sortedBy { a -> a.name } }
@@ -58,6 +60,10 @@ class LibraryProvider(
         _songs.map { it.sortedBy { s -> s.name } }
             .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
+    val gear: StateFlow<List<GearItem>> =
+        _gear.map { it.sortedBy { g -> g.name } }
+            .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
     init {
         // Initial load
         scope.launch {
@@ -69,6 +75,7 @@ class LibraryProvider(
         refreshArtists()
         refreshAlbums()
         refreshSongs()
+        fillGearList()
     }
 
     suspend fun refreshArtists() {
@@ -84,6 +91,45 @@ class LibraryProvider(
     suspend fun refreshSongs() {
         val list: List<Song> = client.get("$baseUrl/songs").body()
         _songs.value = list
+    }
+
+    private suspend fun fillGearList() {
+        val guitar = GearItem(
+            uuid = Uuid.random().toString(),
+            name = "Taylor GS Mini Mahogony",
+            brand = "Taylor",
+            imageUrl = "https://m.media-amazon.com/images/I/31IqIVIFJ0L._SL500_.jpg",
+            buyLink = "https://www.amazon.com/dp/B09S7V94J8?tag=danielchavezt-20&linkCode=osi&th=1&psc=1"
+        )
+        val strings = GearItem(
+            uuid = Uuid.random().toString(),
+            name = "D'Addario Electric Guitar Strings, XS Nickel Coated, XSE1046, Regular Light Gauge 10-46, 6-String Set, Pack of 1",
+            brand = "D'Addario",
+            imageUrl = "https://m.media-amazon.com/images/I/31iSv0VQaXL._SL500_.jpg",
+            buyLink = "https://www.amazon.com/dp/B09TQ5GMM6?tag=danielchavezt-20&linkCode=osi&th=1&psc=1"
+        )
+        val tuner = GearItem(
+            uuid = Uuid.random().toString(),
+            name = "SNARK Super SNARK 3 Clip-On Tuner Black",
+            brand = "Snark",
+            imageUrl = "https://m.media-amazon.com/images/I/41aMTbJI3dL._SL500_.jpg",
+            buyLink = "https://www.amazon.com/dp/B0BVD2DBKG?tag=danielchavezt-20&linkCode=osi&th=1&psc=1"
+        )
+        val picks = GearItem(
+            uuid = Uuid.random().toString(),
+            name = "D'Andrea Snarling Dog Brain Nylon Guitar Picks 12 Pack with Tin Box (Purple, 0.60mm)",
+            brand = "D’Andrea USA Div. of Delmar Prod. Inc.",
+            imageUrl = "https://m.media-amazon.com/images/I/4121uRuCOfL._SL500_.jpg",
+            buyLink = "https://www.amazon.com/dp/B000BBEQZ8?tag=danielchavezt-20&linkCode=osi&th=1&psc=1"
+        )
+        val holder = GearItem(
+            uuid = Uuid.random().toString(),
+            name = "Hercules Stands GSP38WB PLUS - Wood Base, Short Arm",
+            brand = "Hohner Inc, USA",
+            imageUrl = "https://m.media-amazon.com/images/I/41jJpL0ayyL._SL500_.jpg",
+            buyLink = "https://www.amazon.com/dp/B07BBNS4ZL?tag=danielchavezt-20&linkCode=osi&th=1&psc=1"
+        )
+        _gear.value = listOf(guitar, strings, tuner, picks, holder)
     }
 
     // ---- mutations ----

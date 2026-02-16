@@ -41,6 +41,11 @@ fun main() {
                 window.history.pushState(null, "", path)
                 route = Route.Home
             },
+            onNavigateToTabs = {
+                val path = "/tabs"
+                window.history.pushState(null, "", path)
+                route = Route.Tabs
+            },
             onArtists = {
                 val path = "/artists"
                 window.history.pushState(null, "", path)
@@ -65,7 +70,17 @@ fun main() {
                 val path = "/admin/add"
                 window.history.pushState(null, "", path)
                 route = Route.AdminAdd
-            }
+            },
+            onNavigateToGear = {
+                val path = "/gear"
+                window.history.pushState(null, "", path)
+                route = Route.Gear
+            },
+            onNavigateToAbout = {
+                val path = "/about"
+                window.history.pushState(null, "", path)
+                route = Route.About
+            },
         )
     }
 }

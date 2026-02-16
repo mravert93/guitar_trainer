@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.ravert.guitar_trainer.components.PhoneSiteHeader
+import com.ravert.guitar_trainer.components.SelectedTab
 import com.ravert.guitar_trainer.components.SiteHeader
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Album
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Artist
@@ -39,10 +40,13 @@ fun AlbumDetailsScreen(
     artistId: String,
     albumId: String,
     libraryProvider: LibraryProvider,
+    onHomeClick: () -> Unit,
     onSongClick: (String) -> Unit,
     onArtistsClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -68,15 +72,23 @@ fun AlbumDetailsScreen(
         ) {
             if (isPhone) {
                 PhoneSiteHeader(
+                    selectedTab = SelectedTab.ARTISTS,
+                    onHomeClick = onHomeClick,
                     onTabsClick = onTabsClick,
                     onArtistsClick = onArtistsClick,
-                    onAdminClick = onAdminClick
+                    onAdminClick = onAdminClick,
+                    onGearClick = onGearClick,
+                    onAboutClick = onAboutClick,
                 )
             } else {
                 SiteHeader(
+                    selectedTab = SelectedTab.ARTISTS,
+                    onHomeClick = onHomeClick,
                     onTabsClick = onTabsClick,
                     onArtistsClick = onArtistsClick,
-                    onAdminClick = onAdminClick
+                    onAdminClick = onAdminClick,
+                    onGearClick = onGearClick,
+                    onAboutClick = onAboutClick,
                 )
             }
 

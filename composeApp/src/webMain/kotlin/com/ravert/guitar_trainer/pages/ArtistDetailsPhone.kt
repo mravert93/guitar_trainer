@@ -28,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ravert.guitar_trainer.components.ImageBlock
 import com.ravert.guitar_trainer.components.PhoneSiteHeader
+import com.ravert.guitar_trainer.components.SelectedTab
 import com.ravert.guitar_trainer.components.SiteHeader
 import com.ravert.guitar_trainer.components.VerticalImageBlock
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Album
@@ -40,11 +41,14 @@ import kotlin.collections.chunked
 fun ArtistDetailsPhone(
     artistId: String,
     libraryProvider: LibraryProvider,
+    onHomeClick: () -> Unit,
     onSongClick: (String) -> Unit,
     onAlbumClick: (String, String) -> Unit,
     onArtistsClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -63,9 +67,13 @@ fun ArtistDetailsPhone(
         modifier = modifier.fillMaxSize(),
     ) {
         PhoneSiteHeader(
+            selectedTab = SelectedTab.ARTISTS,
+            onHomeClick = onHomeClick,
             onTabsClick = onTabsClick,
             onArtistsClick = onArtistsClick,
             onAdminClick = onAdminClick,
+            onGearClick = onGearClick,
+            onAboutClick = onAboutClick
         )
 
         Column(

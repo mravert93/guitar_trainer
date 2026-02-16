@@ -2,12 +2,15 @@ package com.ravert.guitar_trainer.router
 
 sealed class Route {
     object Home : Route()
+    object Tabs : Route()
     object Admin : Route()
     object AdminAdd : Route()
     object Artists : Route()
     data class Song(val id: String) : Route()
     data class Artist(val id: String) : Route()
     data class Album(val artistId: String, val albumId: String) : Route()
+    data object Gear : Route()
+    data object About : Route()
 }
 
 fun parsePathToRoute(path: String): Route {
@@ -24,6 +27,9 @@ fun parsePathToRoute(path: String): Route {
         segments.size == 3 && segments[0] == "albums" -> Route.Album(artistId = segments[1], albumId = segments[2])
         segments[0] == "admin" -> Route.Admin
         segments[0] == "artists" -> Route.Artists
+        segments[0] == "tabs" -> Route.Tabs
+        segments[0] == "gear" -> Route.Gear
+        segments[0] == "about" -> Route.About
         else -> Route.Home // fallback
     }
 }

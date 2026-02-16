@@ -12,15 +12,18 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.ravert.guitar_trainer.components.ImageBlock
 import com.ravert.guitar_trainer.components.PhoneSiteHeader
+import com.ravert.guitar_trainer.components.SelectedTab
 import com.ravert.guitar_trainer.components.SiteHeader
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Song
 import com.ravert.guitar_trainer.guitartrainer.managers.LibraryProvider
 import com.ravert.guitar_trainer.guitartrainer.parser.fetchDocHtml
 import com.ravert.guitar_trainer.guitartrainer.parser.sanitizeForMonospace
+import com.ravert.guitar_trainer.pages.AboutScreen
 import com.ravert.guitar_trainer.pages.AlbumDetailsScreen
-import com.ravert.guitar_trainer.pages.ArtistDetailsDesktop
 import com.ravert.guitar_trainer.pages.ArtistDetailsScreen
 import com.ravert.guitar_trainer.pages.ArtistsScreen
+import com.ravert.guitar_trainer.pages.GearScreen
+import com.ravert.guitar_trainer.pages.HomepageScreen
 import com.ravert.guitar_trainer.pages.LibraryAdminHost
 import com.ravert.guitar_trainer.pages.TabbedAdminScreen
 import com.ravert.guitar_trainer.router.Route
@@ -32,30 +35,48 @@ fun App(
     onNavigateToArtist: (String) -> Unit,
     onNavigateToAlbum: (String, String) -> Unit,
     onNavigateHome: () -> Unit,
+    onNavigateToTabs: () -> Unit,
     onArtists: () -> Unit,
     onAdminClick: () -> Unit,
     onAdminAdd: () -> Unit,
+    onNavigateToGear: () -> Unit,
+    onNavigateToAbout: () -> Unit,
 ) {
     val libraryProvider = remember { LibraryProvider() }
 
     MaterialTheme {
         Box(modifier = Modifier.fillMaxSize()) {
             when (currentRoute) {
-                is Route.Home -> HomeScreen(
+                is Route.Home -> HomepageScreen(
+                    onTabsClick = onNavigateToTabs,
+                    onAdminClick = onAdminClick,
+                    onArtistsClick = onArtists,
+                    onGearClick = onNavigateToGear,
+                    onAboutClick = onNavigateToAbout,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                is Route.Tabs -> TabsScreen(
+                    onHomeClick = onNavigateHome,
                     onSongClick = onNavigateToSong,
                     onArtistClick = onNavigateToArtist,
                     onArtistsClick = onArtists,
-                    onTabsClick = onNavigateHome,
+                    onTabsClick = onNavigateToTabs,
                     onAdminClick = onAdminClick,
+                    onGearClick = onNavigateToGear,
+                    onAboutClick = onNavigateToAbout,
                     libraryProvider = libraryProvider,
                     modifier = Modifier.fillMaxSize()
                 )
 
                 is Route.Song -> SongScreen(
                     songId = currentRoute.id,
+                    onHomeClick = onNavigateHome,
                     onArtistsClick = onArtists,
-                    onTabsClick = onNavigateHome,
+                    onTabsClick = onNavigateToTabs,
                     onAdminClick = onAdminClick,
+                    onGearClick = onNavigateToGear,
+                    onAboutClick = onNavigateToAbout,
                     libraryProvider = libraryProvider,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -73,10 +94,13 @@ fun App(
 
                 Route.Artists -> ArtistsScreen(
                     libraryProvider = libraryProvider,
+                    onHomeClick = onNavigateHome,
                     onArtistClick = onNavigateToArtist,
-                    onTabsClick = onNavigateHome,
+                    onTabsClick = onNavigateToTabs,
                     onArtistsClick = onArtists,
                     onAdminClick = onAdminClick,
+                    onGearClick = onNavigateToGear,
+                    onAboutClick = onNavigateToAbout,
                     modifier = Modifier.fillMaxSize()
                 )
 
@@ -84,21 +108,46 @@ fun App(
                     artistId = currentRoute.artistId,
                     albumId = currentRoute.albumId,
                     libraryProvider = libraryProvider,
+                    onHomeClick = onNavigateHome,
                     onSongClick = onNavigateToSong,
                     onArtistsClick = onArtists,
                     onAdminClick = onAdminClick,
-                    onTabsClick = onNavigateHome,
+                    onTabsClick = onNavigateToTabs,
+                    onGearClick = onNavigateToGear,
+                    onAboutClick = onNavigateToAbout,
                     modifier = Modifier.fillMaxSize()
                 )
 
                 is Route.Artist -> ArtistDetailsScreen(
                     artistId = currentRoute.id,
                     libraryProvider = libraryProvider,
+                    onHomeClick = onNavigateHome,
                     onSongClick = onNavigateToSong,
                     onAlbumClick = onNavigateToAlbum,
                     onArtistsClick = onArtists,
                     onAdminClick = onAdminClick,
-                    onTabsClick = onNavigateHome,
+                    onTabsClick = onNavigateToTabs,
+                    onGearClick = onNavigateToGear,
+                    onAboutClick = onNavigateToAbout,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                is Route.Gear -> GearScreen(
+                    onTabsClick = onNavigateToTabs,
+                    onAdminClick = onAdminClick,
+                    onArtistsClick = onArtists,
+                    onHomeClick = onNavigateHome,
+                    onAboutClick = onNavigateToAbout,
+                    libraryProvider = libraryProvider,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                Route.About -> AboutScreen(
+                    onTabsClick = onNavigateToTabs,
+                    onAdminClick = onAdminClick,
+                    onArtistsClick = onArtists,
+                    onGearClick = onNavigateToGear,
+                    onHomeClick = onNavigateHome,
                     modifier = Modifier.fillMaxSize()
                 )
             }
@@ -107,12 +156,15 @@ fun App(
 }
 
 @Composable
-fun HomeScreen(
+fun TabsScreen(
+    onHomeClick: () -> Unit,
     onSongClick: (String) -> Unit,
     onArtistClick: (String) -> Unit,
     onArtistsClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
     libraryProvider: LibraryProvider,
     modifier: Modifier = Modifier,
 ) {
@@ -167,15 +219,23 @@ fun HomeScreen(
         Column {
             if (isPhone) {
                 PhoneSiteHeader(
+                    selectedTab = SelectedTab.TABS,
+                    onHomeClick = onHomeClick,
                     onTabsClick = onTabsClick,
                     onArtistsClick = onArtistsClick,
-                    onAdminClick = onAdminClick
+                    onAdminClick = onAdminClick,
+                    onGearClick = onGearClick,
+                    onAboutClick = onAboutClick,
                 )
             } else {
                 SiteHeader(
+                    selectedTab = SelectedTab.TABS,
+                    onHomeClick = onHomeClick,
                     onTabsClick = onTabsClick,
                     onArtistsClick = onArtistsClick,
-                    onAdminClick = onAdminClick
+                    onAdminClick = onAdminClick,
+                    onGearClick = onGearClick,
+                    onAboutClick = onAboutClick,
                 )
             }
 
@@ -286,9 +346,12 @@ fun HomeScreen(
 @Composable
 fun SongScreen(
     songId: String,
+    onHomeClick: () -> Unit,
     onArtistsClick: () -> Unit,
     onTabsClick: () -> Unit,
     onAdminClick: () -> Unit,
+    onGearClick: () -> Unit,
+    onAboutClick: () -> Unit,
     libraryProvider: LibraryProvider,
     modifier: Modifier,
 ) {
@@ -327,15 +390,23 @@ fun SongScreen(
         Column {
             if (isPhone) {
                 PhoneSiteHeader(
+                    selectedTab = SelectedTab.TABS,
+                    onHomeClick = onHomeClick,
                     onTabsClick = onTabsClick,
                     onArtistsClick = onArtistsClick,
-                    onAdminClick = onAdminClick
+                    onAdminClick = onAdminClick,
+                    onGearClick = onGearClick,
+                    onAboutClick = onAboutClick,
                 )
             } else {
                 SiteHeader(
+                    selectedTab = SelectedTab.TABS,
+                    onHomeClick = onHomeClick,
                     onTabsClick = onTabsClick,
                     onArtistsClick = onArtistsClick,
-                    onAdminClick = onAdminClick
+                    onAdminClick = onAdminClick,
+                    onGearClick = onGearClick,
+                    onAboutClick = onAboutClick,
                 )
             }
 
