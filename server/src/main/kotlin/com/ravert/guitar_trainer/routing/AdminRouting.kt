@@ -5,6 +5,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
@@ -56,6 +57,9 @@ data class CreateSongRequest(
     val bpm: Int,
     val docUrl: String
 )
+
+@Serializable
+data class LatestYoutubeVideoResponse(val videoId: String?)
 
 fun Application.configureAdminRoutes(
     httpClient: HttpClient,
@@ -125,6 +129,20 @@ fun Application.configureAdminRoutes(
             } else {
                 call.respond(song)
             }
+        }
+
+        get("/youtube/latest") {
+            val channelId = "UCBAJtmrwfVzbibgI-OsjzEg"
+            val rssUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=$channelId"
+
+            val xml = httpClient.get(rssUrl).bodyAsText()
+
+            val videoId = Regex("<yt:videoId>([^<]+)</yt:videoId>")
+                .find(xml)
+                ?.groupValues
+                ?.getOrNull(1)
+
+            call.respond(LatestYoutubeVideoResponse(videoId))
         }
 
         get("/imageProxy") {

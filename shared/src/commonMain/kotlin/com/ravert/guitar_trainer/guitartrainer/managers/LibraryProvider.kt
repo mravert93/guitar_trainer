@@ -12,6 +12,7 @@ import com.ravert.guitar_trainer.guitartrainer.datamodels.api.CreateSongRequest
 import com.ravert.guitar_trainer.guitartrainer.datamodels.api.DeleteAlbumRequest
 import com.ravert.guitar_trainer.guitartrainer.datamodels.api.DeleteArtistRequest
 import com.ravert.guitar_trainer.guitartrainer.datamodels.api.DeleteSongRequest
+import com.ravert.guitar_trainer.guitartrainer.datamodels.api.LatestYoutubeVideoResponse
 import com.ravert.guitar_trainer.guitartrainer.http.httpClient
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -20,6 +21,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.utils.EmptyContent.contentType
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
@@ -63,6 +65,11 @@ class LibraryProvider(
     val gear: StateFlow<List<GearItem>> =
         _gear.map { it.sortedBy { g -> g.name } }
             .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    companion object {
+        private const val CHANNEL_ID = "UCBAJtmrwfVzbibgI-OsjzEg"
+        private const val YT_RSS = "https://www.youtube.com/feeds/videos.xml?channel_id=$CHANNEL_ID"
+    }
 
     init {
         // Initial load
@@ -130,6 +137,12 @@ class LibraryProvider(
             buyLink = "https://www.amazon.com/dp/B07BBNS4ZL?tag=danielchavezt-20&linkCode=osi&th=1&psc=1"
         )
         _gear.value = listOf(guitar, strings, tuner, picks, holder)
+    }
+
+    suspend fun fetchLatestYoutubeVideoId(): String? {
+        return client.get("http://0.0.0.0:8081/youtube/latest")
+            .body<LatestYoutubeVideoResponse>()
+            .videoId
     }
 
     // ---- mutations ----

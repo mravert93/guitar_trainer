@@ -1,4 +1,6 @@
 package com.ravert.guitar_trainer.guitartrainer.datamodels.api
 
-class LatestYoutubeVideoResponse {
-}
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class LatestYoutubeVideoResponse(val videoId: String?)

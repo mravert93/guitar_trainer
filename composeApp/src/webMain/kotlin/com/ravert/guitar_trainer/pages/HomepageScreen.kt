@@ -21,6 +21,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,8 +38,9 @@ import androidx.compose.ui.unit.dp
 import com.ravert.guitar_trainer.components.PhoneSiteHeader
 import com.ravert.guitar_trainer.components.SelectedTab
 import com.ravert.guitar_trainer.components.SiteHeader
+import com.ravert.guitar_trainer.components.YoutubeEmbedSlot
+import com.ravert.guitar_trainer.guitartrainer.managers.LibraryProvider
 import guitar_trainer.composeapp.generated.resources.Res
-import guitar_trainer.composeapp.generated.resources.dclogo
 import guitar_trainer.composeapp.generated.resources.guitarbg
 import org.jetbrains.compose.resources.painterResource
 
@@ -44,9 +51,15 @@ fun HomepageScreen(
     onArtistsClick: () -> Unit,
     onGearClick: () -> Unit,
     onAboutClick: () -> Unit,
+    libraryProvider: LibraryProvider,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
+    var latestVideoId: String? by remember { mutableStateOf(null) }
+
+    LaunchedEffect(Unit) {
+        latestVideoId = libraryProvider.fetchLatestYoutubeVideoId()
+    }
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize(),
@@ -168,6 +181,27 @@ fun HomepageScreen(
                     modifier = Modifier.size(width = 200.dp, height = 72.dp)
                 ) {
                     Text("TABS", style = MaterialTheme.typography.titleMedium)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(Color.Black),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Text(
+                        text = "Check out my latest lesson",
+                        style = MaterialTheme.typography.displayMedium,
+                        color = Color(0xFFDF7800),
+                        textAlign = TextAlign.Center,
+                        fontWeight = FontWeight.Bold,
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
                 }
             }
         }

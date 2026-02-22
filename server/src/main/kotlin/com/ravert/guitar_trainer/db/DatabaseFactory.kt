@@ -37,6 +37,11 @@ object DatabaseFactory {
         Database.connect(dataSource)
 
         transaction {
+            SchemaUtils.drop(
+                ArtistsTable,
+                AlbumsTable,
+                SongsTable
+            )
             SchemaUtils.createMissingTablesAndColumns(
                 ArtistsTable,
                 AlbumsTable,
@@ -54,22 +59,36 @@ data class DbConfig(
 
 fun dbConfigFromEnv(): DbConfig {
     val raw = System.getenv("DATABASE_URL")
-        ?: error("DATABASE_URL env var not set")
+        ?: "postgres://postgres:password@localhost:5432/mydb"
 
-    val uri = URI(raw)
-    val (user, pass) = (uri.userInfo ?: "").split(":", limit = 2).let {
-        it[0] to (it.getOrNull(1) ?: "")
+    if (raw.startsWith("postgres://") || raw.startsWith("postgresql://")) {
+        // Parse libpq-style URL (postgres://user:pass@host:port/db)
+        val uri = URI(raw)
+        val userInfo = uri.userInfo.split(":")
+        val rUsername = userInfo[0]
+        val rPassword = userInfo.getOrElse(1) { "" }
+        val host = uri.host
+        val port = if (uri.port == -1) 5432 else uri.port
+        val db = uri.path.trimStart('/')
+        val jdbcAddedUrl = "jdbc:postgresql://$host:$port/$db"
+
+        return DbConfig(jdbcAddedUrl, rUsername, rPassword)
+    } else {
+        val uri = URI(raw)
+        val (user, pass) = (uri.userInfo ?: "").split(":", limit = 2).let {
+            it[0] to (it.getOrNull(1) ?: "")
+        }
+
+        val jdbcUrl = buildString {
+            append("jdbc:postgresql://")
+            append(uri.host)
+            if (uri.port != -1) append(":${uri.port}")
+            append(uri.path) // includes /dbname
+            // SSL flags (safe defaults; adjust if you know internal URL doesn’t need it)
+            append("?sslmode=require")
+        }
+
+        return DbConfig(jdbcUrl, user, pass)
     }
-
-    val jdbcUrl = buildString {
-        append("jdbc:postgresql://")
-        append(uri.host)
-        if (uri.port != -1) append(":${uri.port}")
-        append(uri.path) // includes /dbname
-        // SSL flags (safe defaults; adjust if you know internal URL doesn’t need it)
-        append("?sslmode=require")
-    }
-
-    return DbConfig(jdbcUrl, user, pass)
 }
 

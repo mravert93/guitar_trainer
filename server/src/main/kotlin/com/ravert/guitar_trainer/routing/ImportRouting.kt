@@ -67,9 +67,6 @@ fun Application.configureImportRoutes(
             var skipped = 0
             val errors = mutableListOf<String>()
 
-            // cache artistName -> artistUuid (avoid DB lookups)
-            val artistCache = mutableMapOf<String, String>()
-
             // Existing data
             val existingArtists = repo.getArtists()
                 .associateBy { it.name.lowercase() }
@@ -104,11 +101,13 @@ fun Application.configureImportRoutes(
                         artistName = artistName.split(" & ").first()
                     }
 
-                    val existingArtist = existingArtists[artistName]
+                    val existingArtist = existingArtists[artistName.lowercase()]
                     if (existingArtist != null) {
                         val existingSong = existingSongs[existingArtist.uuid]?.firstOrNull { it.name == songName }
                         if (existingSong != null) {
                             // Both artist and song already exist in db, skip
+                            skipped++
+                            i++
                             continue
                         }
                     }
@@ -120,12 +119,11 @@ fun Application.configureImportRoutes(
                         artistName,
                     )
 
-                    val artistKey = artistName.lowercase()
-                    val artistUuid = artistCache.getOrPut(artistKey) {
-                        // Upsert by name in DB; return uuid
-                        val existing = existingArtists[artistName]
-                        if (existing != null) existing.uuid
-                        else {
+                    val artistUuid = existingArtist?.uuid ?: run {
+                        val alreadyCreatedNew = newArtists.firstOrNull { it.name.equals(artistName, ignoreCase = true) }
+                        if (alreadyCreatedNew != null) {
+                            alreadyCreatedNew.uuid.toString()
+                        } else {
                             val created = NewArtist(
                                 name = artistName,
                                 imageUrl = lookupResult?.artist?.picture_big,
@@ -137,13 +135,13 @@ fun Application.configureImportRoutes(
                     }
 
                     // Upsert song by (artistUuid + songName) or by docUrl (your choice)
-                    val existingSong = existingSongs[artistUuid]?.first { it.name == songName }
+                    val existingSong = existingSongs[artistUuid]?.firstOrNull { it.name == songName }
                     if (existingSong == null) {
                         val album = lookupResult?.album?.title ?: "Unknown Album"
                         val artwork = lookupResult?.album?.cover_big ?: ""
 
                         val existingAlbumUuid: String = existingAlbums[artistUuid]
-                            ?.first { it.name == album }
+                            ?.firstOrNull { it.name == album }
                             ?.uuid
                             ?: run {
                                 val newlyAddedAlbum = newAlbums[artistUuid]?.firstOrNull { it.name == album }

@@ -181,7 +181,7 @@ fun ArtistsScreen(
 }
 
 @Composable
-private fun ArtistItem(
+fun ArtistItem(
     artist: Artist,
     onClick: () -> Unit,
     textColor: Color,

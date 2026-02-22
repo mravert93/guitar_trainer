@@ -53,6 +53,7 @@ fun App(
                     onArtistsClick = onArtists,
                     onGearClick = onNavigateToGear,
                     onAboutClick = onNavigateToAbout,
+                    libraryProvider = libraryProvider,
                     modifier = Modifier.fillMaxSize()
                 )
 
