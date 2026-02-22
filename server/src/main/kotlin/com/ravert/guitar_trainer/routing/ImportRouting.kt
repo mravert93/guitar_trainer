@@ -52,7 +52,7 @@ fun Application.configureImportRoutes(
 
             val docIdx = idx("Document Link").takeIf { it >= 0 } ?: idx("Document link")
             val fileIdIdx = idx("File ID").takeIf { it >= 0 } ?: idx("File ID")
-            val songIdx = idx("Song")
+            val songIdx = idx("Song Title")
             val artistIdx = idx("Artist")
 
             if (docIdx == null || songIdx < 0 || artistIdx < 0) {
