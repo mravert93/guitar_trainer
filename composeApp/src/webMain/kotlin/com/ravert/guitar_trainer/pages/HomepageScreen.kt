@@ -55,11 +55,6 @@ fun HomepageScreen(
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
-    var latestVideoId: String? by remember { mutableStateOf(null) }
-
-    LaunchedEffect(Unit) {
-        latestVideoId = libraryProvider.fetchLatestYoutubeVideoId()
-    }
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize(),
