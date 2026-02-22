@@ -37,11 +37,6 @@ object DatabaseFactory {
         Database.connect(dataSource)
 
         transaction {
-            SchemaUtils.drop(
-                ArtistsTable,
-                AlbumsTable,
-                SongsTable
-            )
             SchemaUtils.createMissingTablesAndColumns(
                 ArtistsTable,
                 AlbumsTable,
