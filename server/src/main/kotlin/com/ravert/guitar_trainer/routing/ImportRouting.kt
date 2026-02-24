@@ -7,6 +7,7 @@ import com.ravert.guitar_trainer.db.NewSong
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Album
 import com.ravert.guitar_trainer.import.AlbumLookupResults
 import com.ravert.guitar_trainer.import.MbRateLimiter
+import com.ravert.guitar_trainer.import.SongTabDetail
 import com.ravert.guitar_trainer.import.deezerLookupTrack
 import com.ravert.guitar_trainer.import.enrichWithMusicBrainzAndCAA
 import io.ktor.server.application.*
@@ -23,6 +24,7 @@ import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.util.UUID
+import kotlin.String
 
 @Serializable
 data class ImportResult(
@@ -43,7 +45,7 @@ fun Application.configureImportRoutes(
 
             val csvText = httpClient.get(csvUrl).bodyAsText()
 
-            val rows = parseCsv(csvText)
+            val rows = parseCsv(csvText, initialDrop = 5)
             if (rows.isEmpty()) return@post call.respond(ImportResult(0, 0, 0, listOf("CSV empty")))
 
             // Normalize header names
@@ -191,6 +193,66 @@ fun Application.configureImportRoutes(
 
             call.respond(ImportResult(artistsUpserted, songsUpserted, skipped, errors))
         }
+
+        get("/admin/tabDetails") {
+            val csvUrl = "https://docs.google.com/spreadsheets/d/1vt7Ub1EiwC9uPWJxcDiKXkEVM6j3FMOPuNIatSDjUIE/export?format=csv&gid=0"
+
+            val csvText = httpClient.get(csvUrl).bodyAsText()
+
+            val rows = parseCsv(csvText, initialDrop = 0)
+            if (rows.isEmpty()) return@get call.respond(ImportResult(0, 0, 0, listOf("CSV empty")))
+
+            // Normalize header names
+            val header = rows.first().map { it.trim() }
+            fun idx(name: String): Int = header.indexOfFirst { it.equals(name, ignoreCase = true) }
+
+            val songIdx = idx("Song")
+            val artistIdx = idx("Artist")
+            val tuningIdx = idx("Tuning")
+            val capoIdx = idx("Capo")
+            val chordsIdx = idx("Chords")
+            val techniqueIdx = idx("Technique")
+
+            // Existing data
+            val existingArtists = repo.getArtists()
+                .associateBy { it.name.lowercase() }
+            val existingSongs = repo.getSongs()
+                .groupBy { it.artistUuid }
+
+            // Drop header
+            val droppedRows = rows.drop(1)
+            val tabDetails = arrayListOf<SongTabDetail>()
+            droppedRows.forEach { row ->
+                val songName = row.getOrNull(songIdx)?.trim().orEmpty()
+                val artistName = row.getOrNull(artistIdx)?.trim().orEmpty()
+                val tuning = row.getOrNull(tuningIdx)?.trim().orEmpty()
+                val capo = row.getOrNull(capoIdx)?.trim().orEmpty()
+                val chords = row.getOrNull(chordsIdx)?.trim().orEmpty()
+                val technique = row.getOrNull(techniqueIdx)?.trim().orEmpty()
+
+                // Check if song / artist exist
+                val songId = existingArtists[artistName.lowercase()]?.let { artist ->
+                    existingSongs[artist.uuid]
+                        ?.firstOrNull { it.name.equals(songName, ignoreCase = true) }
+                        ?.uuid
+                }
+
+                tabDetails.add(
+                    SongTabDetail(
+                        songId = songId,
+                        artistName = artistName,
+                        songName = songName,
+                        tuning = tuning,
+                        capo = capo,
+                        chords = chords,
+                        technique = technique,
+                        )
+                )
+            }
+
+            val existingTabs = tabDetails.filter { it.songId != null }
+            call.respond(existingTabs)
+        }
     }
 }
 
@@ -198,8 +260,8 @@ fun Application.configureImportRoutes(
  * Minimal CSV parser (handles quoted commas).
  * If you already have a CSV lib, use that instead.
  */
-fun parseCsv(csv: String): List<List<String>> {
-    val lines = csv.split("\n").drop(5).map { it.trimEnd('\r') }.filter { it.isNotBlank() }
+fun parseCsv(csv: String, initialDrop: Int): List<List<String>> {
+    val lines = csv.split("\n").drop(initialDrop).map { it.trimEnd('\r') }.filter { it.isNotBlank() }
     return lines.map { line ->
         val out = mutableListOf<String>()
         val sb = StringBuilder()

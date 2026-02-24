@@ -40,6 +40,7 @@ fun Application.module() {
     install(CORS) {
         // For dev: allow your web app origin
         allowHost("guitar-trainer-static-site.onrender.com", schemes = listOf("https"))
+        allowHost("dc-frontend-yy6w.onrender.com", schemes = listOf("https"))
         allowHost("localhost:8080", schemes = listOf("http"))
         allowHost("127.0.0.1:8080", schemes = listOf("http"))
         allowHost("localhost:5173", schemes = listOf("http"))

@@ -1,6 +1,7 @@
 package com.ravert.guitar_trainer.routing
 
 import com.ravert.guitar_trainer.db.LibraryRepository
+import com.ravert.guitar_trainer.youtube.fetchLatestNonShortNonLiveUnder50Min
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -133,14 +134,23 @@ fun Application.configureAdminRoutes(
 
         get("/youtube/latest") {
             val channelId = "UCBAJtmrwfVzbibgI-OsjzEg"
+            val apiKey = "AIzaSyDbYWvzXEhAmn7FwCUc634ufsFoYkKaEak"
             val rssUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=$channelId"
 
             val xml = httpClient.get(rssUrl).bodyAsText()
 
-            val videoId = Regex("<yt:videoId>([^<]+)</yt:videoId>")
-                .find(xml)
-                ?.groupValues
-                ?.getOrNull(1)
+//            val videoId = Regex("<yt:videoId>([^<]+)</yt:videoId>")
+//                .find(xml)
+//                ?.groupValues
+//                ?.getOrNull(1)
+//
+//            call.respond(LatestYoutubeVideoResponse(videoId))
+
+            val videoId = fetchLatestNonShortNonLiveUnder50Min(
+                http = httpClient,
+                apiKey = apiKey,
+                channelId = channelId
+            )
 
             call.respond(LatestYoutubeVideoResponse(videoId))
         }
