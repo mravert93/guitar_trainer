@@ -5,6 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SongTabDetail(
     val songId: String?,
+    val artistId: String?,
     val artistName: String,
     val songName: String,
     val tuning: String,

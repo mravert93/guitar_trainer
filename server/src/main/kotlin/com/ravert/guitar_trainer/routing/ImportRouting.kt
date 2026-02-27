@@ -231,7 +231,8 @@ fun Application.configureImportRoutes(
                 val technique = row.getOrNull(techniqueIdx)?.trim().orEmpty()
 
                 // Check if song / artist exist
-                val songId = existingArtists[artistName.lowercase()]?.let { artist ->
+                val artist = existingArtists[artistName.lowercase()]
+                val songId = artist?.let { artist ->
                     existingSongs[artist.uuid]
                         ?.firstOrNull { it.name.equals(songName, ignoreCase = true) }
                         ?.uuid
@@ -240,6 +241,7 @@ fun Application.configureImportRoutes(
                 tabDetails.add(
                     SongTabDetail(
                         songId = songId,
+                        artistId = artist?.uuid,
                         artistName = artistName,
                         songName = songName,
                         tuning = tuning,
