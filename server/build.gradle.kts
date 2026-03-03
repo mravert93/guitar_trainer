@@ -42,4 +42,6 @@ dependencies {
     implementation("org.postgresql:postgresql:42.7.3")
 
     implementation("io.ktor:ktor-server-cors-jvm:3.0.0")
+
+    implementation("com.stripe:stripe-java:26.0.0")
 }

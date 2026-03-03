@@ -3,6 +3,7 @@ package com.ravert.guitar_trainer
 import com.ravert.guitar_trainer.db.DatabaseFactory
 import com.ravert.guitar_trainer.db.LibraryRepository
 import com.ravert.guitar_trainer.routing.configureAdminRoutes
+import com.ravert.guitar_trainer.routing.configureDonationRouting
 import com.ravert.guitar_trainer.routing.configureImportRoutes
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -79,6 +80,7 @@ fun Application.module() {
 
     configureAdminRoutes(httpClient, repo)
     configureImportRoutes(httpClient, repo)
+    configureDonationRouting()
 
     routing {
         get("/") {
