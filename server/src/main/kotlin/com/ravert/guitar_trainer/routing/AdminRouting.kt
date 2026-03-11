@@ -222,7 +222,7 @@ fun Application.configureAdminRoutes(
                     path = "/",
                     httpOnly = true,
                     secure = true,
-                    extensions = mapOf("SameSite" to "Lax")
+                    extensions = mapOf("SameSite" to "None")
                 )
             )
 
@@ -247,7 +247,7 @@ fun Application.configureAdminRoutes(
                     httpOnly = true,
                     secure = true,
                     maxAge = 0,
-                    extensions = mapOf("SameSite" to "Lax")
+                    extensions = mapOf("SameSite" to "None")
                 )
             )
             call.respond(HttpStatusCode.OK, "Logged Out")
