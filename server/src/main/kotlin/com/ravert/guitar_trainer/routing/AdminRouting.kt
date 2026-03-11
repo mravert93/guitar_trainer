@@ -9,6 +9,7 @@ import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readBytes
 import io.ktor.http.ContentType
+import io.ktor.http.Cookie
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.isSuccess
@@ -61,6 +62,11 @@ data class CreateSongRequest(
 
 @Serializable
 data class LatestYoutubeVideoResponse(val videoId: String?)
+
+@Serializable
+data class AdminLoginRequest(
+    val password: String,
+)
 
 fun Application.configureAdminRoutes(
     httpClient: HttpClient,
@@ -199,5 +205,52 @@ fun Application.configureAdminRoutes(
             }
         }
 
+        post("/admin/login") {
+            val req = call.receive<AdminLoginRequest>()
+
+            // Grab from env
+            val adminPassword = System.getenv("ADMIN_PASSWORD")
+
+            if (req.password != adminPassword) {
+                return@post call.respond(HttpStatusCode.Unauthorized, "Invalid Password")
+            }
+
+            call.response.cookies.append(
+                Cookie(
+                    name = "admin_auth",
+                    value = "true",
+                    path = "/",
+                    httpOnly = true,
+                    secure = true,
+                    extensions = mapOf("SameSite" to "Lax")
+                )
+            )
+
+            call.respond(HttpStatusCode.OK, "Logged In")
+        }
+
+        get("/admin/check-auth") {
+            val cookie = call.request.cookies["admin_auth"]
+            if (cookie == "true") {
+                call.respond(HttpStatusCode.OK, "Authorized")
+            } else {
+                call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+            }
+        }
+
+        post("/admin/logout") {
+            call.response.cookies.append(
+                Cookie(
+                    name = "admin_auth",
+                    value = "",
+                    path = "/",
+                    httpOnly = true,
+                    secure = true,
+                    maxAge = 0,
+                    extensions = mapOf("SameSite" to "Lax")
+                )
+            )
+            call.respond(HttpStatusCode.OK, "Logged Out")
+        }
     }
 }

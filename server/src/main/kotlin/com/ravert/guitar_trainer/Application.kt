@@ -56,7 +56,7 @@ fun Application.module() {
         allowHeader(HttpHeaders.ContentType)
         allowHeader(HttpHeaders.Accept)
 
-        allowCredentials = false
+        allowCredentials = true
     }
 
     DatabaseFactory.init()
