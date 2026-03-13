@@ -40,7 +40,8 @@ object DatabaseFactory {
             SchemaUtils.createMissingTablesAndColumns(
                 ArtistsTable,
                 AlbumsTable,
-                SongsTable
+                SongsTable,
+                BetaFeedbackTable
             )
         }
     }

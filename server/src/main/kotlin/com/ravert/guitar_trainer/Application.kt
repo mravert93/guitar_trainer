@@ -1,8 +1,10 @@
 package com.ravert.guitar_trainer
 
+import com.ravert.guitar_trainer.db.BetaFeedbackRepository
 import com.ravert.guitar_trainer.db.DatabaseFactory
 import com.ravert.guitar_trainer.db.LibraryRepository
 import com.ravert.guitar_trainer.routing.configureAdminRoutes
+import com.ravert.guitar_trainer.routing.configureBetaFeedbackRoutes
 import com.ravert.guitar_trainer.routing.configureDonationRouting
 import com.ravert.guitar_trainer.routing.configureImportRoutes
 import io.ktor.client.HttpClient
@@ -16,7 +18,6 @@ import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation as ServerContentNegotiation
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
-import io.ktor.serialization.kotlinx.json.json
 
 import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.response.*
@@ -61,6 +62,7 @@ fun Application.module() {
 
     DatabaseFactory.init()
     val repo = LibraryRepository()
+    val betaFeedbackRepo = BetaFeedbackRepository()
 
     val httpClient = HttpClient(CIO) {
         followRedirects = true
@@ -81,6 +83,7 @@ fun Application.module() {
     configureAdminRoutes(httpClient, repo)
     configureImportRoutes(httpClient, repo)
     configureDonationRouting()
+    configureBetaFeedbackRoutes(betaFeedbackRepo)
 
     routing {
         get("/") {
