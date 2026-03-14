@@ -183,6 +183,11 @@ fun Application.configureDonationRouting() {
                             .build()
                     )
                     .putMetadata("type", "donation")
+                    .setInvoiceCreation(
+                        SessionCreateParams.InvoiceCreation.builder()
+                            .setEnabled(true)
+                            .build()
+                    )
                     .build()
             }
 
