@@ -23,7 +23,7 @@ data class Song(
     val artistUuid: String,
     val albumUuid: String,
     val name: String,
-    val songLength: Int, // Seconds
+    val lengthSeconds: Int, // Seconds
     val bpm: Int,
     val docUrl: String,
 )

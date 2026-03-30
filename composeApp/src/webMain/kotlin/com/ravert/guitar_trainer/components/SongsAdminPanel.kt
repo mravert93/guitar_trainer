@@ -23,7 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -90,7 +89,7 @@ fun SongsAdminPanel(
                             artistUuid = defaultArtist?.uuid ?: "",
                             albumUuid = "null",
                             name = "New Song",
-                            songLength = 180,
+                            lengthSeconds = 180,
                             bpm = 100,
                             docUrl = ""
                         )
@@ -155,18 +154,18 @@ private fun SongEditRow(
     // Editable fields (only really used in expanded mode)
     var name by remember(song.uuid) { mutableStateOf(song.name) }
     var docUrl by remember(song.uuid) { mutableStateOf(song.docUrl) }
-    var songLength by remember(song.uuid) { mutableStateOf(song.songLength.toString()) }
+    var songLength by remember(song.uuid) { mutableStateOf(song.lengthSeconds.toString()) }
     var bpmText by remember(song.uuid) { mutableStateOf(song.bpm.toString()) }
 
     var artistUuid by remember(song.uuid) { mutableStateOf(song.artistUuid) }
     var albumUuid by remember(song.uuid) { mutableStateOf(song.albumUuid ?: "") }
 
     // If the backing song changes (e.g. refreshed from backend after save), keep UI in sync
-    LaunchedEffect(song.uuid, song.name, song.docUrl, song.songLength, song.bpm, song.artistUuid, song.albumUuid) {
+    LaunchedEffect(song.uuid, song.name, song.docUrl, song.lengthSeconds, song.bpm, song.artistUuid, song.albumUuid) {
         if (!expanded) {
             name = song.name
             docUrl = song.docUrl
-            songLength = song.songLength.toString()
+            songLength = song.lengthSeconds.toString()
             bpmText = song.bpm.toString()
             artistUuid = song.artistUuid
             albumUuid = song.albumUuid ?: ""
@@ -193,7 +192,7 @@ private fun SongEditRow(
         if (!expanded) false else {
             name != song.name ||
                     docUrl != song.docUrl ||
-                    (songLength.toIntOrNull() ?: song.songLength) != song.songLength ||
+                    (songLength.toIntOrNull() ?: song.lengthSeconds) != song.lengthSeconds ||
                     (bpmText.toIntOrNull() ?: song.bpm) != song.bpm ||
                     artistUuid != song.artistUuid ||
                     albumUuid != (song.albumUuid ?: "")
@@ -215,7 +214,7 @@ private fun SongEditRow(
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "$selectedArtistName • $selectedAlbumName • ${song.songLength}s • ${song.bpm} bpm",
+                        text = "$selectedArtistName • $selectedAlbumName • ${song.lengthSeconds}s • ${song.bpm} bpm",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -294,7 +293,7 @@ private fun SongEditRow(
                         Button(
                             enabled = isDirty,
                             onClick = {
-                                val len = songLength.toIntOrNull() ?: song.songLength
+                                val len = songLength.toIntOrNull() ?: song.lengthSeconds
                                 val bpm = bpmText.toIntOrNull() ?: song.bpm
 
                                 onSave(
@@ -316,7 +315,7 @@ private fun SongEditRow(
                             // reset edits to current song values
                             name = song.name
                             docUrl = song.docUrl
-                            songLength = song.songLength.toString()
+                            songLength = song.lengthSeconds.toString()
                             bpmText = song.bpm.toString()
                             artistUuid = song.artistUuid
                             albumUuid = song.albumUuid ?: ""

@@ -416,7 +416,7 @@ fun SongScreen(
                 isLoading -> Text("Loading...")
                 else -> AutoScrollDocScreen(
                     docText = docBody!!,
-                    songDurationMs = song!!.songLength * 400L,
+                    songDurationMs = song!!.lengthSeconds * 400L,
                     initialBpm = song!!.bpm,
                     modifier = Modifier.weight(1f)
                 )

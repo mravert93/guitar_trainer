@@ -176,7 +176,7 @@ class LibraryRepository {
                     artistUuid = row[SongsTable.artistId].toString(),
                     albumUuid = row[SongsTable.albumId].toString(),
                     name = row[SongsTable.name],
-                    songLength = row[SongsTable.lengthSeconds],
+                    lengthSeconds = row[SongsTable.lengthSeconds],
                     bpm = row[SongsTable.bpm],
                     docUrl = row[SongsTable.docUrl]
                 )
@@ -194,7 +194,7 @@ class LibraryRepository {
             artistUuid = row[SongsTable.artistId].toString(),
             albumUuid = row[SongsTable.albumId].toString(),
             name = row[SongsTable.name],
-            songLength = row[SongsTable.lengthSeconds],
+            lengthSeconds = row[SongsTable.lengthSeconds],
             bpm = row[SongsTable.bpm],
             docUrl = row[SongsTable.docUrl]
         )
@@ -252,7 +252,7 @@ class LibraryRepository {
                     artistUuid = row[SongsTable.artistId].toString(),
                     albumUuid = row[SongsTable.albumId].toString(),
                     name = row[SongsTable.name],
-                    songLength = row[SongsTable.lengthSeconds],
+                    lengthSeconds = row[SongsTable.lengthSeconds],
                     bpm = row[SongsTable.bpm],
                     docUrl = row[SongsTable.docUrl]
                 )

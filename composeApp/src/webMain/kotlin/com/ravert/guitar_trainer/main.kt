@@ -56,7 +56,7 @@ fun legacyMain() {
             else -> {
                 AutoScrollDocScreen(
                     docText = docBody!!,
-                    songDurationMs = song!!.songLength * 750L,
+                    songDurationMs = song!!.lengthSeconds * 750L,
                     initialBpm = song!!.bpm,
                 )
             }
