@@ -24,14 +24,6 @@ object DatabaseFactory {
             idleTimeout = 60_000
             maxLifetime = 30 * 60_000
         }
-//        val config = HikariConfig().apply {
-//            jdbcUrl = System.getenv("DB_URL") ?: "jdbc:postgresql://localhost:5432/guitar_trainer"
-//            username = System.getenv("DB_USER") ?: "postgres"
-//            password = System.getenv("DB_PASSWORD") ?: "postgres"
-//            maximumPoolSize = 5
-//            isAutoCommit = false
-//            transactionIsolation = "TRANSACTION_REPEATABLE_READ"
-//        }
 
         val dataSource = HikariDataSource(config)
         Database.connect(dataSource)

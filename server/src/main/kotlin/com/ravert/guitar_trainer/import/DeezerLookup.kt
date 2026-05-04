@@ -10,13 +10,16 @@ suspend fun deezerLookupTrack(
     songName: String,
     artistName: String
 ): DeezerTrack? {
-    val query = """track:"$songName" artist:"$artistName""""
+    // Replace Deezer with something else, maybe spotify
+    return null
 
-    val resp: DeezerSearchResponse = http.get("https://api.deezer.com/search") {
-        parameter("q", query)      // Ktor encodes for you
-        parameter("limit", "1")
-        accept(ContentType.Application.Json)
-    }.body()
-
-    return resp.data.firstOrNull()
+//    val query = """track:"$songName" artist:"$artistName""""
+//
+//    val resp: DeezerSearchResponse = http.get("https://api.deezer.com/search") {
+//        parameter("q", query)      // Ktor encodes for you
+//        parameter("limit", "1")
+//        accept(ContentType.Application.Json)
+//    }.body()
+//
+//    return resp.data.firstOrNull()
 }
