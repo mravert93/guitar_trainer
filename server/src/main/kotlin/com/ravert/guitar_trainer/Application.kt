@@ -1,12 +1,15 @@
 package com.ravert.guitar_trainer
 
 import com.ravert.guitar_trainer.db.BetaFeedbackRepository
+import com.ravert.guitar_trainer.db.AuthRepository
 import com.ravert.guitar_trainer.db.DatabaseFactory
 import com.ravert.guitar_trainer.db.LibraryRepository
 import com.ravert.guitar_trainer.routing.configureAdminRoutes
+import com.ravert.guitar_trainer.routing.configureAuthRoutes
 import com.ravert.guitar_trainer.routing.configureBetaFeedbackRoutes
 import com.ravert.guitar_trainer.routing.configureDonationRouting
 import com.ravert.guitar_trainer.routing.configureImportRoutes
+import com.ravert.guitar_trainer.routing.configureYoutubeMemberRoutes
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.http.ContentType
@@ -51,6 +54,7 @@ fun Application.module() {
 
         allowMethod(HttpMethod.Get)
         allowMethod(HttpMethod.Post)
+        allowMethod(HttpMethod.Patch)
         allowMethod(HttpMethod.Options)
         allowMethod(HttpMethod.Delete)
 
@@ -63,6 +67,7 @@ fun Application.module() {
     DatabaseFactory.init()
     val repo = LibraryRepository()
     val betaFeedbackRepo = BetaFeedbackRepository()
+    val authRepository = AuthRepository()
 
     val httpClient = HttpClient(CIO) {
         followRedirects = true
@@ -80,9 +85,11 @@ fun Application.module() {
     }
 
 
+    configureAuthRoutes(authRepository, httpClient)
     configureAdminRoutes(httpClient, repo)
     configureImportRoutes(httpClient, repo)
-    configureDonationRouting()
+    configureDonationRouting(authRepository)
+    configureYoutubeMemberRoutes(authRepository, httpClient)
     configureBetaFeedbackRoutes(betaFeedbackRepo)
 
     routing {

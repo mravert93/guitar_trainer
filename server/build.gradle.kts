@@ -43,5 +43,7 @@ dependencies {
 
     implementation("io.ktor:ktor-server-cors-jvm:3.0.0")
 
+    implementation("at.favre.lib:bcrypt:0.10.2")
+
     implementation("com.stripe:stripe-java:26.0.0")
 }
