@@ -338,7 +338,7 @@ private fun googleDocFetchTarget(value: String): GoogleDocFetchTarget? {
     val docId = Regex("^/document/d/([^/]+)").find(uri.path)?.groupValues?.getOrNull(1)
         ?: return null
 
-    return if (uri.path.endsWith("/pub")) {
+    return if (!uri.path.endsWith("/export")) {
         GoogleDocFetchTarget(
             url = "https://docs.google.com/document/d/$docId/pub",
             isPublishedDoc = true,
