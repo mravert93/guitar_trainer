@@ -8,6 +8,7 @@ import io.ktor.client.request.header
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readBytes
+import io.ktor.client.statement.request
 import io.ktor.http.ContentType
 import io.ktor.http.Cookie
 import io.ktor.http.HttpHeaders
@@ -26,6 +27,7 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 import java.net.URLDecoder
+import java.net.URI
 import java.util.UUID
 import kotlin.text.Charsets.UTF_8
 
@@ -205,6 +207,51 @@ fun Application.configureAdminRoutes(
             }
         }
 
+        get("/docProxy") {
+            val encoded = call.request.queryParameters["url"]
+                ?: return@get call.respondText("Missing url", status = HttpStatusCode.BadRequest)
+
+            val targetUrl = URLDecoder.decode(encoded, UTF_8.name())
+            if (!isAllowedGoogleDocExportUrl(targetUrl)) {
+                return@get call.respondText("Unsupported doc url", status = HttpStatusCode.BadRequest)
+            }
+
+            try {
+                val upstream: HttpResponse = httpClient.get(targetUrl) {
+                    header(HttpHeaders.UserAgent, "Mozilla/5.0 (Ktor Doc Proxy)")
+                    header(HttpHeaders.Accept, "text/plain,*/*;q=0.8")
+                }
+
+                if (upstream.request.url.host != "docs.google.com") {
+                    return@get call.respondText(
+                        "Google Doc export redirected to ${upstream.request.url.host}. Make sure the document is public to anyone with the link.",
+                        status = HttpStatusCode.BadGateway
+                    )
+                }
+
+                if (!upstream.status.isSuccess()) {
+                    return@get call.respondText(
+                        "Upstream failed: ${upstream.status}",
+                        status = HttpStatusCode.BadGateway
+                    )
+                }
+
+                val text = upstream.bodyAsText()
+                if (text.trimStart().startsWith("<")) {
+                    return@get call.respondText(
+                        "Google returned HTML instead of text. Make sure the document is public to anyone with the link.",
+                        status = HttpStatusCode.BadGateway
+                    )
+                }
+
+                call.response.headers.append(HttpHeaders.CacheControl, "public, max-age=300")
+                call.respondText(text, ContentType.Text.Plain)
+            } catch (t: Throwable) {
+                call.application.log.warn("docProxy failed for $targetUrl: ${t::class.simpleName}: ${t.message}")
+                call.respondText("Doc proxy failed", status = HttpStatusCode.BadGateway)
+            }
+        }
+
         post("/admin/login") {
             val req = call.receive<AdminLoginRequest>()
 
@@ -253,4 +300,18 @@ fun Application.configureAdminRoutes(
             call.respond(HttpStatusCode.OK, "Logged Out")
         }
     }
+}
+
+private fun isAllowedGoogleDocExportUrl(value: String): Boolean {
+    val uri = try {
+        URI(value)
+    } catch (_: Exception) {
+        return false
+    }
+
+    return uri.scheme == "https" &&
+        uri.host == "docs.google.com" &&
+        uri.path.startsWith("/document/d/") &&
+        uri.path.endsWith("/export") &&
+        uri.query?.split("&")?.any { it == "format=txt" } == true
 }
