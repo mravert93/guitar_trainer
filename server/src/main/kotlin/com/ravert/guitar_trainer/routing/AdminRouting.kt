@@ -211,8 +211,9 @@ fun Application.configureAdminRoutes(
             val encoded = call.request.queryParameters["url"]
                 ?: return@get call.respondText("Missing url", status = HttpStatusCode.BadRequest)
 
-            val targetUrl = URLDecoder.decode(encoded, UTF_8.name())
-            if (!isAllowedGoogleDocExportUrl(targetUrl)) {
+            val requestedUrl = URLDecoder.decode(encoded, UTF_8.name())
+            val targetUrl = googleDocExportUrl(requestedUrl)
+            if (targetUrl == null) {
                 return@get call.respondText("Unsupported doc url", status = HttpStatusCode.BadRequest)
             }
 
@@ -224,7 +225,14 @@ fun Application.configureAdminRoutes(
 
                 if (upstream.request.url.host != "docs.google.com") {
                     return@get call.respondText(
-                        "Google Doc export redirected to ${upstream.request.url.host}. Make sure the document is public to anyone with the link.",
+                        "Google Doc export redirected to ${upstream.request.url.host}. Make sure the document is shared with anyone who has the link.",
+                        status = HttpStatusCode.BadGateway
+                    )
+                }
+
+                if (upstream.status == HttpStatusCode.Unauthorized || upstream.status == HttpStatusCode.Forbidden) {
+                    return@get call.respondText(
+                        "Google Doc export is not publicly accessible. Share the document with anyone who has the link, then try again.",
                         status = HttpStatusCode.BadGateway
                     )
                 }
@@ -239,7 +247,7 @@ fun Application.configureAdminRoutes(
                 val text = upstream.bodyAsText()
                 if (text.trimStart().startsWith("<")) {
                     return@get call.respondText(
-                        "Google returned HTML instead of text. Make sure the document is public to anyone with the link.",
+                        "Google returned HTML instead of text. Make sure the document is shared with anyone who has the link.",
                         status = HttpStatusCode.BadGateway
                     )
                 }
@@ -247,7 +255,7 @@ fun Application.configureAdminRoutes(
                 call.response.headers.append(HttpHeaders.CacheControl, "public, max-age=300")
                 call.respondText(text, ContentType.Text.Plain)
             } catch (t: Throwable) {
-                call.application.log.warn("docProxy failed for $targetUrl: ${t::class.simpleName}: ${t.message}")
+                call.application.log.warn("docProxy failed for $requestedUrl: ${t::class.simpleName}: ${t.message}")
                 call.respondText("Doc proxy failed", status = HttpStatusCode.BadGateway)
             }
         }
@@ -302,16 +310,17 @@ fun Application.configureAdminRoutes(
     }
 }
 
-private fun isAllowedGoogleDocExportUrl(value: String): Boolean {
+private fun googleDocExportUrl(value: String): String? {
     val uri = try {
         URI(value)
     } catch (_: Exception) {
-        return false
+        return null
     }
 
-    return uri.scheme == "https" &&
-        uri.host == "docs.google.com" &&
-        uri.path.startsWith("/document/d/") &&
-        uri.path.endsWith("/export") &&
-        uri.query?.split("&")?.any { it == "format=txt" } == true
+    if (uri.scheme != "https" || uri.host != "docs.google.com") return null
+
+    val docId = Regex("^/document/d/([^/]+)").find(uri.path)?.groupValues?.getOrNull(1)
+        ?: return null
+
+    return "https://docs.google.com/document/d/$docId/export?format=txt"
 }
