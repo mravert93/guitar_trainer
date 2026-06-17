@@ -212,59 +212,60 @@ fun Application.configureAdminRoutes(
                 ?: return@get call.respondText("Missing url", status = HttpStatusCode.BadRequest)
 
             val requestedUrl = URLDecoder.decode(encoded, UTF_8.name())
-            val target = googleDocFetchTarget(requestedUrl)
-            if (target == null) {
+            val targets = googleDocFetchTargets(requestedUrl)
+            if (targets == null) {
                 return@get call.respondText("Unsupported doc url", status = HttpStatusCode.BadRequest)
             }
 
             try {
-                val upstream: HttpResponse = httpClient.get(target.url) {
-                    header(HttpHeaders.UserAgent, "Mozilla/5.0 (Ktor Doc Proxy)")
-                    header(HttpHeaders.Accept, "text/plain,*/*;q=0.8")
-                }
+                var lastFailure = "Could not load Google Doc."
 
-                if (upstream.request.url.host != "docs.google.com") {
-                    return@get call.respondText(
-                        "Google Doc export redirected to ${upstream.request.url.host}. Make sure the document is shared with anyone who has the link.",
-                        status = HttpStatusCode.BadGateway
-                    )
-                }
+                for (target in targets) {
+                    val upstream: HttpResponse = httpClient.get(target.url) {
+                        header(HttpHeaders.UserAgent, "Mozilla/5.0 (Ktor Doc Proxy)")
+                        header(HttpHeaders.Accept, "text/plain,*/*;q=0.8")
+                    }
 
-                val body = upstream.bodyAsText()
-                if (target.isPublishedDoc) {
-                    val text = extractPublishedGoogleDocText(body)
-                        ?: return@get call.respondText(
-                            "Could not extract text from published Google Doc.",
-                            status = HttpStatusCode.BadGateway
-                        )
+                    if (upstream.request.url.host != "docs.google.com") {
+                        lastFailure =
+                            "Google Doc redirected to ${upstream.request.url.host}. Make sure the document is public or published to the web."
+                        continue
+                    }
+
+                    val body = upstream.bodyAsText()
+                    if (target.isPublishedDoc) {
+                        val text = extractPublishedGoogleDocText(body)
+                        if (text != null) {
+                            call.response.headers.append(HttpHeaders.CacheControl, "public, max-age=300")
+                            return@get call.respondText(text, ContentType.Text.Plain)
+                        }
+
+                        lastFailure = "Could not extract text from published Google Doc."
+                        continue
+                    }
+
+                    if (upstream.status == HttpStatusCode.Unauthorized || upstream.status == HttpStatusCode.Forbidden) {
+                        lastFailure =
+                            "Google Doc export is not publicly accessible. Share the document with anyone who has the link, or publish it to the web."
+                        continue
+                    }
+
+                    if (!upstream.status.isSuccess()) {
+                        lastFailure = "Upstream failed: ${upstream.status}"
+                        continue
+                    }
+
+                    if (body.trimStart().startsWith("<")) {
+                        lastFailure =
+                            "Google returned HTML instead of text. Share the document with anyone who has the link, or publish it to the web."
+                        continue
+                    }
 
                     call.response.headers.append(HttpHeaders.CacheControl, "public, max-age=300")
-                    return@get call.respondText(text, ContentType.Text.Plain)
+                    return@get call.respondText(body, ContentType.Text.Plain)
                 }
 
-                if (upstream.status == HttpStatusCode.Unauthorized || upstream.status == HttpStatusCode.Forbidden) {
-                    return@get call.respondText(
-                        "Google Doc export is not publicly accessible. Share the document with anyone who has the link, then try again.",
-                        status = HttpStatusCode.BadGateway
-                    )
-                }
-
-                if (!upstream.status.isSuccess()) {
-                    return@get call.respondText(
-                        "Upstream failed: ${upstream.status}",
-                        status = HttpStatusCode.BadGateway
-                    )
-                }
-
-                if (body.trimStart().startsWith("<")) {
-                    return@get call.respondText(
-                        "Google returned HTML instead of text. Make sure the document is shared with anyone who has the link.",
-                        status = HttpStatusCode.BadGateway
-                    )
-                }
-
-                call.response.headers.append(HttpHeaders.CacheControl, "public, max-age=300")
-                call.respondText(body, ContentType.Text.Plain)
+                call.respondText(lastFailure, status = HttpStatusCode.BadGateway)
             } catch (t: Throwable) {
                 call.application.log.warn("docProxy failed for $requestedUrl: ${t::class.simpleName}: ${t.message}")
                 call.respondText("Doc proxy failed", status = HttpStatusCode.BadGateway)
@@ -326,7 +327,7 @@ private data class GoogleDocFetchTarget(
     val isPublishedDoc: Boolean,
 )
 
-private fun googleDocFetchTarget(value: String): GoogleDocFetchTarget? {
+private fun googleDocFetchTargets(value: String): List<GoogleDocFetchTarget>? {
     val uri = try {
         URI(value)
     } catch (_: Exception) {
@@ -338,30 +339,30 @@ private fun googleDocFetchTarget(value: String): GoogleDocFetchTarget? {
     val docId = Regex("^/document/d/([^/]+)").find(uri.path)?.groupValues?.getOrNull(1)
         ?: return null
 
-    return if (!uri.path.endsWith("/export")) {
-        GoogleDocFetchTarget(
-            url = "https://docs.google.com/document/d/$docId/pub",
-            isPublishedDoc = true,
-        )
-    } else {
-        GoogleDocFetchTarget(
-            url = "https://docs.google.com/document/d/$docId/export?format=txt",
-            isPublishedDoc = false,
-        )
+    val pubTarget = GoogleDocFetchTarget(
+        url = "https://docs.google.com/document/d/$docId/pub",
+        isPublishedDoc = true,
+    )
+    val exportTarget = GoogleDocFetchTarget(
+        url = "https://docs.google.com/document/d/$docId/export?format=txt",
+        isPublishedDoc = false,
+    )
+
+    return when {
+        uri.path.endsWith("/pub") -> listOf(pubTarget)
+        uri.path.endsWith("/export") -> listOf(exportTarget)
+        else -> listOf(pubTarget, exportTarget)
     }
 }
 
 private fun extractPublishedGoogleDocText(html: String): String? {
-    val docContentIndex = html.indexOf("doc-content")
-    if (docContentIndex == -1) return null
-
-    val divStart = html.lastIndexOf("<div", docContentIndex)
-    if (divStart == -1) return null
-
-    val divEnd = findMatchingDivEnd(html, divStart) ?: return null
-    val contentHtml = html.substring(divStart, divEnd)
+    val contentHtml = extractDocContentDiv(html)
+        ?: extractContentsDiv(html)
+        ?: return null
 
     return contentHtml
+        .replace(Regex("(?is)<style\\b[^>]*>.*?</style>"), "")
+        .replace(Regex("(?is)<script\\b[^>]*>.*?</script>"), "")
         .replace(Regex("(?i)<br\\s*/?>"), "\n")
         .replace(Regex("(?i)</p\\s*>"), "\n")
         .replace(Regex("(?i)</div\\s*>"), "\n")
@@ -371,6 +372,26 @@ private fun extractPublishedGoogleDocText(html: String): String? {
         .dropWhile { it.isBlank() }
         .dropLastWhile { it.isBlank() }
         .joinToString("\n")
+        .takeIf { it.isNotBlank() }
+}
+
+private fun extractDocContentDiv(html: String): String? {
+    val docContentIndex = html.indexOf("doc-content")
+    if (docContentIndex == -1) return null
+
+    val divStart = html.lastIndexOf("<div", docContentIndex)
+    if (divStart == -1) return null
+
+    val divEnd = findMatchingDivEnd(html, divStart) ?: return null
+    return html.substring(divStart, divEnd)
+}
+
+private fun extractContentsDiv(html: String): String? {
+    val contentsStart = html.indexOf("<div id=\"contents\"")
+    if (contentsStart == -1) return null
+
+    val contentsEnd = findMatchingDivEnd(html, contentsStart) ?: return null
+    return html.substring(contentsStart, contentsEnd)
 }
 
 private fun findMatchingDivEnd(html: String, divStart: Int): Int? {
