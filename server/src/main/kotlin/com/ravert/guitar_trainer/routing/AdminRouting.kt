@@ -226,7 +226,7 @@ fun Application.configureAdminRoutes(
                         header(HttpHeaders.Accept, "text/plain,*/*;q=0.8")
                     }
 
-                    if (upstream.request.url.host != "docs.google.com") {
+                    if (!isAllowedGoogleDocResponseHost(upstream.request.url.host, target)) {
                         lastFailure =
                             "Google Doc redirected to ${upstream.request.url.host}. Make sure the document is public or published to the web."
                         continue
@@ -353,6 +353,13 @@ private fun googleDocFetchTargets(value: String): List<GoogleDocFetchTarget>? {
         uri.path.endsWith("/export") -> listOf(exportTarget)
         else -> listOf(pubTarget, exportTarget)
     }
+}
+
+private fun isAllowedGoogleDocResponseHost(host: String, target: GoogleDocFetchTarget): Boolean {
+    if (host == "docs.google.com") return true
+
+    return !target.isPublishedDoc &&
+        (host == "googleusercontent.com" || host.endsWith(".googleusercontent.com"))
 }
 
 private fun extractPublishedGoogleDocText(html: String): String? {
