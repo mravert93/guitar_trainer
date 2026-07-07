@@ -2,7 +2,10 @@ package com.ravert.guitar_trainer.routing
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.ravert.guitar_trainer.db.AuthRepository
+import com.ravert.guitar_trainer.db.StripeCustomerRecord
+import com.ravert.guitar_trainer.db.UserEntitlementRecord
 import com.ravert.guitar_trainer.db.UserRecord
+import com.ravert.guitar_trainer.db.YoutubeMemberRecord
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.forms.FormDataContent
@@ -81,6 +84,68 @@ data class SuccessResponse(
 data class UpdateYoutubeDisplayNameRequest(
     val youtubeUsername: String? = null,
     val youtubeDisplayName: String? = null,
+)
+
+@Serializable
+data class AdminUsersResponse(
+    val users: List<AdminUserSummaryDto>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int,
+)
+
+@Serializable
+data class AdminUserSummaryDto(
+    val uuid: String,
+    val email: String,
+    val youtubeUsername: String? = null,
+    val youtubeChannelId: String? = null,
+    val youtubeDisplayName: String? = null,
+    val hasPremium: Boolean,
+    val premiumSources: List<String>,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class AdminUserDetailResponse(
+    val user: AdminUserSummaryDto,
+    val entitlements: List<AdminEntitlementDto>,
+    val stripe: AdminStripeCustomerDto? = null,
+    val youtube: AdminYoutubeMemberDto? = null,
+)
+
+@Serializable
+data class AdminEntitlementDto(
+    val uuid: String,
+    val source: String,
+    val status: String,
+    val currentlyActive: Boolean,
+    val startsAt: Long,
+    val endsAt: Long? = null,
+    val sourceExternalId: String? = null,
+    val sourceLabel: String? = null,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class AdminStripeCustomerDto(
+    val stripeCustomerId: String,
+    val stripeSubscriptionId: String? = null,
+    val subscriptionStatus: String? = null,
+    val currentPeriodEnd: Long? = null,
+)
+
+@Serializable
+data class AdminYoutubeMemberDto(
+    val matchedMember: Boolean,
+    val youtubeChannelId: String,
+    val displayName: String,
+    val profileImageUrl: String? = null,
+    val membershipLevelName: String? = null,
+    val memberSince: Long? = null,
+    val lastSeenAt: Long? = null,
 )
 
 @Serializable
@@ -206,6 +271,92 @@ fun Application.configureAuthRoutes(authRepository: AuthRepository, httpClient: 
             }
         }
 
+        get("/admin/users") {
+            if (!call.hasAdminAuth()) {
+                return@get call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+            }
+
+            val limit = call.request.queryParameters["limit"]
+                ?.toIntOrNull()
+                ?.coerceIn(1, 100)
+                ?: 50
+            val offset = call.request.queryParameters["offset"]
+                ?.toIntOrNull()
+                ?.coerceAtLeast(0)
+                ?: 0
+            val premium = call.request.queryParameters["premium"] ?: "all"
+            if (premium !in setOf("all", "yes", "no")) {
+                return@get call.respond(HttpStatusCode.BadRequest, "premium must be all, yes, or no")
+            }
+
+            val users = authRepository.listUsers(call.request.queryParameters["query"])
+                .map { user -> authRepository.adminUserSummaryDto(user) }
+                .filter { user ->
+                    when (premium) {
+                        "yes" -> user.hasPremium
+                        "no" -> !user.hasPremium
+                        else -> true
+                    }
+                }
+
+            call.respond(
+                AdminUsersResponse(
+                    users = users.drop(offset).take(limit),
+                    total = users.size,
+                    limit = limit,
+                    offset = offset,
+                )
+            )
+        }
+
+        get("/admin/users/{userUuid}") {
+            if (!call.hasAdminAuth()) {
+                return@get call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+            }
+
+            val userUuid = call.userUuidParameter()
+                ?: return@get call.respond(HttpStatusCode.BadRequest, "Invalid user UUID")
+            val user = authRepository.findUserByUuid(userUuid)
+                ?: return@get call.respond(HttpStatusCode.NotFound, "User not found")
+
+            call.respond(authRepository.adminUserDetailResponse(user))
+        }
+
+        patch("/admin/users/{userUuid}/youtube") {
+            if (!call.hasAdminAuth()) {
+                return@patch call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+            }
+
+            val userUuid = call.userUuidParameter()
+                ?: return@patch call.respond(HttpStatusCode.BadRequest, "Invalid user UUID")
+            val user = authRepository.findUserByUuid(userUuid)
+                ?: return@patch call.respond(HttpStatusCode.NotFound, "User not found")
+
+            val req = call.receive<UpdateYoutubeDisplayNameRequest>()
+            val youtubeUsername = (req.youtubeUsername ?: req.youtubeDisplayName)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+            val normalizedYoutubeUsername = youtubeUsername?.let(::normalizeYoutubeUsername)
+            val youtubeChannelId = youtubeUsername?.let { resolveYoutubeChannelId(httpClient, it) }
+            val now = nowMillis()
+            val updatedUser = authRepository.updateUserYoutubeUsername(
+                userUuid = user.uuid,
+                username = youtubeUsername,
+                normalizedUsername = normalizedYoutubeUsername,
+                youtubeChannelId = youtubeChannelId,
+                now = now,
+            ) ?: return@patch call.respond(HttpStatusCode.NotFound, "User not found")
+
+            if (user.youtubeChannelId != youtubeChannelId) {
+                authRepository.deactivateYoutubePremiumForUser(user.uuid, now)
+            }
+            if (youtubeChannelId != null) {
+                authRepository.grantYoutubePremiumIfMemberMatches(user.uuid, youtubeChannelId, now)
+            }
+
+            call.respond(authRepository.adminUserDetailResponse(updatedUser))
+        }
+
         post("/admin/users/{userUuid}/grant-premium") {
             if (!call.hasAdminAuth()) {
                 return@post call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
@@ -214,13 +365,12 @@ fun Application.configureAuthRoutes(authRepository: AuthRepository, httpClient: 
             val userUuid = call.userUuidParameter()
                 ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid user UUID")
 
-            if (authRepository.findUserByUuid(userUuid) == null) {
-                return@post call.respond(HttpStatusCode.NotFound, "User not found")
-            }
+            val user = authRepository.findUserByUuid(userUuid)
+                ?: return@post call.respond(HttpStatusCode.NotFound, "User not found")
 
             val req = call.receive<ManualPremiumGrantRequest>()
             authRepository.grantManualPremium(userUuid, req.sourceLabel, req.endsAt, nowMillis())
-            call.respond(SuccessResponse(success = true))
+            call.respond(authRepository.adminUserDetailResponse(user))
         }
 
         post("/admin/users/{userUuid}/revoke-premium") {
@@ -231,12 +381,11 @@ fun Application.configureAuthRoutes(authRepository: AuthRepository, httpClient: 
             val userUuid = call.userUuidParameter()
                 ?: return@post call.respond(HttpStatusCode.BadRequest, "Invalid user UUID")
 
-            if (authRepository.findUserByUuid(userUuid) == null) {
-                return@post call.respond(HttpStatusCode.NotFound, "User not found")
-            }
+            val user = authRepository.findUserByUuid(userUuid)
+                ?: return@post call.respond(HttpStatusCode.NotFound, "User not found")
 
             authRepository.revokeManualPremium(userUuid, nowMillis())
-            call.respond(SuccessResponse(success = true))
+            call.respond(authRepository.adminUserDetailResponse(user))
         }
     }
 }
@@ -296,6 +445,75 @@ suspend fun AuthRepository.authResponse(user: UserRecord) = AuthResponse(
         youtubeDisplayName = user.youtubeDisplayName,
         hasPremium = userHasPremium(user.uuid),
     )
+)
+
+private suspend fun AuthRepository.adminUserSummaryDto(user: UserRecord): AdminUserSummaryDto {
+    val now = nowMillis()
+    val entitlements = findEntitlementsByUserUuid(user.uuid)
+    val activeSources = entitlements
+        .filter { it.isCurrentlyActive(now) }
+        .map { it.source }
+        .distinct()
+        .sorted()
+
+    return AdminUserSummaryDto(
+        uuid = user.uuid.toString(),
+        email = user.email,
+        youtubeUsername = user.youtubeUsername,
+        youtubeChannelId = user.youtubeChannelId,
+        youtubeDisplayName = user.youtubeDisplayName,
+        hasPremium = userHasPremium(user.uuid),
+        premiumSources = activeSources,
+        createdAt = user.createdAt,
+        updatedAt = user.updatedAt,
+    )
+}
+
+private suspend fun AuthRepository.adminUserDetailResponse(user: UserRecord): AdminUserDetailResponse {
+    val now = nowMillis()
+    val entitlements = findEntitlementsByUserUuid(user.uuid)
+    val stripeCustomer = findStripeCustomerByUserUuid(user.uuid)
+    val youtubeMember = user.youtubeChannelId?.let { findYoutubeMemberByChannelId(it) }
+
+    return AdminUserDetailResponse(
+        user = adminUserSummaryDto(user),
+        entitlements = entitlements.map { it.toAdminEntitlementDto(now) },
+        stripe = stripeCustomer?.toAdminStripeCustomerDto(),
+        youtube = youtubeMember?.toAdminYoutubeMemberDto(),
+    )
+}
+
+private fun UserEntitlementRecord.toAdminEntitlementDto(now: Long) = AdminEntitlementDto(
+    uuid = uuid.toString(),
+    source = source,
+    status = status,
+    currentlyActive = isCurrentlyActive(now),
+    startsAt = startsAt,
+    endsAt = endsAt,
+    sourceExternalId = sourceExternalId,
+    sourceLabel = sourceLabel,
+    createdAt = createdAt,
+    updatedAt = updatedAt,
+)
+
+private fun UserEntitlementRecord.isCurrentlyActive(now: Long): Boolean =
+    status == "active" && startsAt <= now && (endsAt == null || endsAt > now)
+
+private fun StripeCustomerRecord.toAdminStripeCustomerDto() = AdminStripeCustomerDto(
+    stripeCustomerId = stripeCustomerId,
+    stripeSubscriptionId = stripeSubscriptionId,
+    subscriptionStatus = subscriptionStatus,
+    currentPeriodEnd = currentPeriodEnd,
+)
+
+private fun YoutubeMemberRecord.toAdminYoutubeMemberDto() = AdminYoutubeMemberDto(
+    matchedMember = true,
+    youtubeChannelId = youtubeChannelId.orEmpty(),
+    displayName = displayName,
+    profileImageUrl = profileImageUrl,
+    membershipLevelName = membershipLevelName,
+    memberSince = memberSince,
+    lastSeenAt = lastSeenAt,
 )
 
 private fun createSession(authRepository: AuthRepository, userUuid: UUID, now: Long): String {

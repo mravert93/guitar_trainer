@@ -25,6 +25,8 @@ data class UserRecord(
     val youtubeChannelId: String?,
     val youtubeDisplayName: String?,
     val normalizedYoutubeDisplayName: String?,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
 
 data class StripeCustomerRecord(
@@ -42,6 +44,20 @@ data class YoutubeMemberRecord(
     val profileImageUrl: String?,
     val membershipLevelName: String?,
     val memberSince: Long?,
+    val lastSeenAt: Long? = null,
+)
+
+data class UserEntitlementRecord(
+    val uuid: UUID,
+    val userUuid: UUID,
+    val source: String,
+    val status: String,
+    val startsAt: Long,
+    val endsAt: Long?,
+    val sourceExternalId: String?,
+    val sourceLabel: String?,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
 
 class AuthRepository {
@@ -66,7 +82,7 @@ class AuthRepository {
             it[createdAt] = now
             it[updatedAt] = now
         }
-        UserRecord(uuid, email, passwordHash, youtubeUsername, normalizedYoutubeUsername, youtubeChannelId, null, null)
+        UserRecord(uuid, email, passwordHash, youtubeUsername, normalizedYoutubeUsername, youtubeChannelId, null, null, now, now)
     }
 
     fun findUserByEmail(email: String): UserRecord? = transaction {
@@ -83,6 +99,24 @@ class AuthRepository {
             .where { UsersTable.uuid eq uuid }
             .singleOrNull()
             ?.toUserRecord()
+    }
+
+    fun listUsers(query: String?): List<UserRecord> = transaction {
+        val normalizedQuery = query
+            ?.trim()
+            ?.lowercase()
+            ?.takeIf { it.isNotBlank() }
+
+        UsersTable
+            .selectAll()
+            .orderBy(UsersTable.createdAt to SortOrder.DESC)
+            .map { it.toUserRecord() }
+            .filter { user ->
+                normalizedQuery == null ||
+                    user.email.lowercase().contains(normalizedQuery) ||
+                    user.youtubeUsername?.lowercase()?.contains(normalizedQuery) == true ||
+                    user.youtubeChannelId?.lowercase()?.contains(normalizedQuery) == true
+            }
     }
 
     fun createSession(userUuid: UUID, sessionTokenHash: String, createdAt: Long, expiresAt: Long) = transaction {
@@ -131,6 +165,14 @@ class AuthRepository {
             }
             .limit(1)
             .empty()
+    }
+
+    fun findEntitlementsByUserUuid(userUuid: UUID): List<UserEntitlementRecord> = transaction {
+        UserEntitlementsTable
+            .selectAll()
+            .where { UserEntitlementsTable.userUuid eq userUuid }
+            .orderBy(UserEntitlementsTable.createdAt to SortOrder.DESC)
+            .map { it.toUserEntitlementRecord() }
     }
 
     fun grantManualPremium(userUuid: UUID, sourceLabel: String?, endsAt: Long?, now: Long) = transaction {
@@ -312,6 +354,14 @@ class AuthRepository {
             ?.toYoutubeMemberRecord()
     }
 
+    fun findYoutubeMemberByChannelId(youtubeChannelId: String): YoutubeMemberRecord? = transaction {
+        YoutubeMembersTable
+            .selectAll()
+            .where { YoutubeMembersTable.youtubeChannelId eq youtubeChannelId }
+            .singleOrNull()
+            ?.toYoutubeMemberRecord()
+    }
+
     fun upsertYoutubeMembers(members: List<YoutubeMemberRecord>, now: Long) = transaction {
         members.forEach { member ->
             val existing = if (member.youtubeChannelId != null) {
@@ -444,6 +494,8 @@ class AuthRepository {
         youtubeChannelId = this[UsersTable.youtubeChannelId],
         youtubeDisplayName = this[UsersTable.youtubeDisplayName],
         normalizedYoutubeDisplayName = this[UsersTable.normalizedYoutubeDisplayName],
+        createdAt = this[UsersTable.createdAt],
+        updatedAt = this[UsersTable.updatedAt],
     )
 
     private fun ResultRow.toStripeCustomerRecord() = StripeCustomerRecord(
@@ -461,6 +513,20 @@ class AuthRepository {
         profileImageUrl = this[YoutubeMembersTable.profileImageUrl],
         membershipLevelName = this[YoutubeMembersTable.membershipLevelName],
         memberSince = this[YoutubeMembersTable.memberSince],
+        lastSeenAt = this[YoutubeMembersTable.lastSeenAt],
+    )
+
+    private fun ResultRow.toUserEntitlementRecord() = UserEntitlementRecord(
+        uuid = this[UserEntitlementsTable.uuid],
+        userUuid = this[UserEntitlementsTable.userUuid],
+        source = this[UserEntitlementsTable.sourceValue],
+        status = this[UserEntitlementsTable.status],
+        startsAt = this[UserEntitlementsTable.startsAt],
+        endsAt = this[UserEntitlementsTable.endsAt],
+        sourceExternalId = this[UserEntitlementsTable.sourceExternalId],
+        sourceLabel = this[UserEntitlementsTable.sourceLabel],
+        createdAt = this[UserEntitlementsTable.createdAt],
+        updatedAt = this[UserEntitlementsTable.updatedAt],
     )
 
     private fun findEntitlement(source: String, sourceExternalId: String): ResultRow? =
