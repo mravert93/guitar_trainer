@@ -4,6 +4,7 @@ import com.ravert.guitar_trainer.guitartrainer.datamodels.Album
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Artist
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Song
 import com.ravert.guitar_trainer.import.SongTabDetail
+import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
@@ -35,6 +36,25 @@ data class NewSong(
     val capo: String? = null,
     val chords: String? = null,
     val technique: String? = null,
+)
+
+@Serializable
+data class LibrarySearchResult(
+    val type: String,
+    val uuid: String,
+    val title: String,
+    val subtitle: String?,
+    val artistUuid: String?,
+    val artistName: String?,
+    val songUuid: String?,
+    val songName: String?,
+    val albumUuid: String?,
+    val imageUrl: String?,
+    val tuning: String?,
+    val capo: String?,
+    val chords: String?,
+    val technique: String?,
+    val matchFields: List<String>,
 )
 
 class LibraryRepository {
@@ -288,6 +308,79 @@ class LibraryRepository {
             }
     }
 
+    fun search(query: String, limit: Int): List<LibrarySearchResult> = transaction {
+        val normalizedQuery = query.trim().lowercase()
+        if (normalizedQuery.isBlank()) return@transaction emptyList()
+
+        val artistResults = ArtistsTable
+            .selectAll()
+            .mapNotNull { row ->
+                val artistName = row[ArtistsTable.name]
+                if (!artistName.lowercase().contains(normalizedQuery)) return@mapNotNull null
+
+                LibrarySearchResult(
+                    type = "artist",
+                    uuid = row[ArtistsTable.id].toString(),
+                    title = artistName,
+                    subtitle = "Artist",
+                    artistUuid = row[ArtistsTable.id].toString(),
+                    artistName = artistName,
+                    songUuid = null,
+                    songName = null,
+                    albumUuid = null,
+                    imageUrl = row[ArtistsTable.imageUrl],
+                    tuning = null,
+                    capo = null,
+                    chords = null,
+                    technique = null,
+                    matchFields = listOf("artistName"),
+                )
+            }
+
+        val songResults = SongsTable
+            .join(ArtistsTable, JoinType.INNER, SongsTable.artistId, ArtistsTable.id)
+            .selectAll()
+            .mapNotNull { row ->
+                val songName = row[SongsTable.name]
+                val artistName = row[ArtistsTable.name]
+                val tuning = row[SongsTable.tuning]
+                val capo = row[SongsTable.capo]
+                val chords = row[SongsTable.chords]
+                val technique = row[SongsTable.technique]
+                val matchFields = buildList {
+                    if (songName.matchesSearch(normalizedQuery)) add("songName")
+                    if (artistName.matchesSearch(normalizedQuery)) add("artistName")
+                    if (tuning.matchesSearch(normalizedQuery)) add("tuning")
+                    if (capo.matchesSearch(normalizedQuery)) add("capo")
+                    if (chords.matchesSearch(normalizedQuery)) add("chords")
+                    if (technique.matchesSearch(normalizedQuery)) add("technique")
+                }
+                if (matchFields.isEmpty()) return@mapNotNull null
+
+                LibrarySearchResult(
+                    type = "song",
+                    uuid = row[SongsTable.id].toString(),
+                    title = songName,
+                    subtitle = artistName,
+                    artistUuid = row[ArtistsTable.id].toString(),
+                    artistName = artistName,
+                    songUuid = row[SongsTable.id].toString(),
+                    songName = songName,
+                    albumUuid = row[SongsTable.albumId].toString(),
+                    imageUrl = row[ArtistsTable.imageUrl],
+                    tuning = tuning,
+                    capo = capo,
+                    chords = chords,
+                    technique = technique,
+                    matchFields = matchFields,
+                )
+            }
+
+        (artistResults + songResults)
+            .sortedWith(compareBy<LibrarySearchResult> { it.searchRank(normalizedQuery) }.thenBy { it.title.lowercase() })
+            .take(limit)
+    }
+
     private fun ResultRow.toSong() = Song(
         uuid = this[SongsTable.id].toString(),
         artistUuid = this[SongsTable.artistId].toString(),
@@ -301,4 +394,21 @@ class LibraryRepository {
         chords = this[SongsTable.chords],
         technique = this[SongsTable.technique],
     )
+}
+
+private fun String?.matchesSearch(normalizedQuery: String): Boolean =
+    this?.lowercase()?.contains(normalizedQuery) == true
+
+private fun LibrarySearchResult.searchRank(normalizedQuery: String): Int {
+    val title = title.lowercase()
+    val artistName = artistName?.lowercase()
+    return when {
+        title == normalizedQuery -> 0
+        type == "artist" && title.startsWith(normalizedQuery) -> 1
+        type == "song" && title.startsWith(normalizedQuery) -> 2
+        artistName == normalizedQuery -> 3
+        title.contains(normalizedQuery) -> 4
+        artistName?.contains(normalizedQuery) == true -> 5
+        else -> 6
+    }
 }

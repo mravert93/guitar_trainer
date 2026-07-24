@@ -74,6 +74,12 @@ data class AdminLoginRequest(
     val password: String,
 )
 
+@Serializable
+data class SearchResponse(
+    val query: String,
+    val results: List<com.ravert.guitar_trainer.db.LibrarySearchResult>,
+)
+
 fun Application.configureAdminRoutes(
     httpClient: HttpClient,
     repo: LibraryRepository
@@ -146,6 +152,20 @@ fun Application.configureAdminRoutes(
             } else {
                 call.respond(song)
             }
+        }
+
+        get("/search") {
+            val query = call.request.queryParameters["q"]?.trim().orEmpty()
+            val limit = call.request.queryParameters["limit"]
+                ?.toIntOrNull()
+                ?.coerceIn(1, 25)
+                ?: 10
+
+            if (query.length < 2) {
+                return@get call.respond(SearchResponse(query = query, results = emptyList()))
+            }
+
+            call.respond(SearchResponse(query = query, results = repo.search(query, limit)))
         }
 
         get("/youtube/latest") {
