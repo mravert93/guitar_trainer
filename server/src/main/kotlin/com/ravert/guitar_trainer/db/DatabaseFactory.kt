@@ -12,7 +12,7 @@ import org.jetbrains.exposed.sql.update
 import java.net.URI
 
 object DatabaseFactory {
-    private const val TabMetadataMigrationId = "2026-07-24-bundled-lesson-tabs-metadata"
+    private const val TabMetadataMigrationId = "2026-07-24-bundled-lesson-tabs-metadata-v2"
 
     fun init() {
         val cfg = dbConfigFromEnv()
@@ -218,6 +218,9 @@ object DatabaseFactory {
         val songsByArtist = SongsTable
             .selectAll()
             .groupBy { row -> row[SongsTable.artistId] }
+        val songsByName = SongsTable
+            .selectAll()
+            .groupBy { row -> row[SongsTable.name].normalizeLookupText() }
 
         var updatedSongs = 0
         var skippedRows = 0
@@ -233,10 +236,12 @@ object DatabaseFactory {
             }
 
             val artistId = artistsByName[artistName.normalizeArtistLookupText()]
-            val songRow = artistId?.let {
-                songsByArtist[it]
-                    ?.firstOrNull { song -> song[SongsTable.name].normalizeLookupText() == songName.normalizeLookupText() }
-            }
+            val songRow = findTabMetadataSongRow(
+                songName = songName,
+                artistId = artistId,
+                songsByArtist = songsByArtist,
+                songsByName = songsByName,
+            )
 
             if (songRow == null) {
                 missingSongs++
@@ -344,6 +349,23 @@ private fun String?.normalizeOptionalText(): String? =
     this
         ?.trim()
         ?.takeIf { it.isNotBlank() }
+
+private fun findTabMetadataSongRow(
+    songName: String,
+    artistId: java.util.UUID?,
+    songsByArtist: Map<java.util.UUID, List<org.jetbrains.exposed.sql.ResultRow>>,
+    songsByName: Map<String, List<org.jetbrains.exposed.sql.ResultRow>>,
+): org.jetbrains.exposed.sql.ResultRow? {
+    val normalizedSongName = songName.normalizeLookupText()
+    val artistMatch = artistId?.let {
+        songsByArtist[it]
+            ?.firstOrNull { song -> song[SongsTable.name].normalizeLookupText() == normalizedSongName }
+    }
+    if (artistMatch != null) return artistMatch
+
+    return songsByName[normalizedSongName]
+        ?.singleOrNull()
+}
 
 private fun String.normalizeLookupText(): String =
     trim()

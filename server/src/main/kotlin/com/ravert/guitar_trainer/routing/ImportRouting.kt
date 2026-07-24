@@ -260,9 +260,11 @@ private fun syncTabMetadataFromCsv(
 
     // Existing data
     val existingArtists = repo.getArtists()
-        .associateBy { it.name.normalizeLookupText() }
+        .associateBy { it.name.normalizeArtistLookupText() }
     val existingSongs = repo.getSongs()
         .groupBy { it.artistUuid }
+    val existingSongsByName = repo.getSongs()
+        .groupBy { it.name.normalizeLookupText() }
 
     // Drop header
     val droppedRows = rows.drop(1)
@@ -286,12 +288,13 @@ private fun syncTabMetadataFromCsv(
             }
 
             // Check if song / artist exist
-            val artist = existingArtists[artistName.normalizeLookupText()]
-            val songId = artist?.let { artist ->
-                existingSongs[artist.uuid]
-                    ?.firstOrNull { it.name.normalizeLookupText() == songName.normalizeLookupText() }
-                    ?.uuid
-            }
+            val artist = existingArtists[artistName.normalizeArtistLookupText()]
+            val songId = findTabMetadataSongId(
+                songName = songName,
+                artistId = artist?.uuid,
+                existingSongs = existingSongs,
+                existingSongsByName = existingSongsByName,
+            )
 
             if (songId == null) {
                 missingSongs++
@@ -363,7 +366,32 @@ fun String?.normalizeOptionalText(): String? =
         ?.trim()
         ?.takeIf { it.isNotBlank() }
 
+private fun findTabMetadataSongId(
+    songName: String,
+    artistId: String?,
+    existingSongs: Map<String, List<com.ravert.guitar_trainer.guitartrainer.datamodels.Song>>,
+    existingSongsByName: Map<String, List<com.ravert.guitar_trainer.guitartrainer.datamodels.Song>>,
+): String? {
+    val normalizedSongName = songName.normalizeLookupText()
+    val artistMatch = artistId?.let {
+        existingSongs[it]
+            ?.firstOrNull { song -> song.name.normalizeLookupText() == normalizedSongName }
+            ?.uuid
+    }
+    if (artistMatch != null) return artistMatch
+
+    return existingSongsByName[normalizedSongName]
+        ?.singleOrNull()
+        ?.uuid
+}
+
 private fun String.normalizeLookupText(): String =
     trim()
         .lowercase()
+        .replace(Regex("\\s+"), " ")
+
+private fun String.normalizeArtistLookupText(): String =
+    normalizeLookupText()
+        .replace("&", "and")
+        .replace(Regex("\\by\\b"), "and")
         .replace(Regex("\\s+"), " ")
