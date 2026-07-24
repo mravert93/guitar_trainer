@@ -28,9 +28,11 @@ data class ImportResult(
 
 @Serializable
 data class TabMetadataSyncResult(
+    val source: String,
     val updatedSongs: Int,
     val skippedRows: Int,
     val missingSongs: Int,
+    val missingRows: List<String> = emptyList(),
     val errors: List<String>,
 )
 
@@ -216,9 +218,24 @@ private suspend fun syncTabMetadataFromSpreadsheet(
     val csvUrl = "https://docs.google.com/spreadsheets/d/1vt7Ub1EiwC9uPWJxcDiKXkEVM6j3FMOPuNIatSDjUIE/export?format=csv&gid=0"
 
     val csvText = httpClient.get(csvUrl).bodyAsText()
+    return syncTabMetadataFromCsv(csvText, repo, source = "google-sheet")
+}
 
+private fun syncTabMetadataFromCsv(
+    csvText: String,
+    repo: LibraryRepository,
+    source: String,
+): TabMetadataSyncResult {
     val rows = parseCsv(csvText, initialDrop = 0)
-    if (rows.isEmpty()) return TabMetadataSyncResult(0, 0, 0, listOf("CSV empty"))
+    if (rows.isEmpty()) {
+        return TabMetadataSyncResult(
+            source = source,
+            updatedSongs = 0,
+            skippedRows = 0,
+            missingSongs = 0,
+            errors = listOf("CSV empty"),
+        )
+    }
 
     // Normalize header names
     val header = rows.first().map { it.trim() }
@@ -232,16 +249,18 @@ private suspend fun syncTabMetadataFromSpreadsheet(
     val techniqueIdx = idx("Technique")
     if (songIdx < 0 || artistIdx < 0 || tuningIdx < 0 || capoIdx < 0 || chordsIdx < 0 || techniqueIdx < 0) {
         return TabMetadataSyncResult(
+            source = source,
             updatedSongs = 0,
             skippedRows = 0,
             missingSongs = 0,
+            missingRows = emptyList(),
             errors = listOf("CSV must include columns: Song, Artist, Tuning, Capo, Chords, Technique. Found: $header"),
         )
     }
 
     // Existing data
     val existingArtists = repo.getArtists()
-        .associateBy { it.name.lowercase() }
+        .associateBy { it.name.normalizeLookupText() }
     val existingSongs = repo.getSongs()
         .groupBy { it.artistUuid }
 
@@ -250,6 +269,7 @@ private suspend fun syncTabMetadataFromSpreadsheet(
     var updatedSongs = 0
     var skippedRows = 0
     var missingSongs = 0
+    val missingRows = mutableListOf<String>()
     val errors = mutableListOf<String>()
     droppedRows.forEach { row ->
         try {
@@ -266,15 +286,18 @@ private suspend fun syncTabMetadataFromSpreadsheet(
             }
 
             // Check if song / artist exist
-            val artist = existingArtists[artistName.lowercase()]
+            val artist = existingArtists[artistName.normalizeLookupText()]
             val songId = artist?.let { artist ->
                 existingSongs[artist.uuid]
-                    ?.firstOrNull { it.name.equals(songName, ignoreCase = true) }
+                    ?.firstOrNull { it.name.normalizeLookupText() == songName.normalizeLookupText() }
                     ?.uuid
             }
 
             if (songId == null) {
                 missingSongs++
+                if (missingRows.size < 50) {
+                    missingRows += "$artistName - $songName"
+                }
                 return@forEach
             }
 
@@ -291,9 +314,11 @@ private suspend fun syncTabMetadataFromSpreadsheet(
     }
 
     return TabMetadataSyncResult(
+        source = source,
         updatedSongs = updatedSongs,
         skippedRows = skippedRows,
         missingSongs = missingSongs,
+        missingRows = missingRows,
         errors = errors,
     )
 }
@@ -337,3 +362,8 @@ fun String?.normalizeOptionalText(): String? =
     this
         ?.trim()
         ?.takeIf { it.isNotBlank() }
+
+private fun String.normalizeLookupText(): String =
+    trim()
+        .lowercase()
+        .replace(Regex("\\s+"), " ")

@@ -47,6 +47,13 @@ object BetaFeedbackTable : Table("beta_feedback") {
     val general_feedback = varchar("general_feedback", 255)
 }
 
+object AppMigrationsTable : Table("app_migrations") {
+    val id = text("id")
+    val appliedAt = long("applied_at")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
 object UsersTable : Table("users") {
     val uuid = uuid("uuid")
     val email = text("email")

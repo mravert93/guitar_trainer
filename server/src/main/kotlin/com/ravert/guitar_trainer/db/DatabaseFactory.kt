@@ -4,10 +4,16 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.insert
+import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import java.net.URI
 
 object DatabaseFactory {
+    private const val TabMetadataMigrationId = "2026-07-24-bundled-lesson-tabs-metadata"
+
     fun init() {
         val cfg = dbConfigFromEnv()
 
@@ -160,6 +166,7 @@ object DatabaseFactory {
                 AlbumsTable,
                 SongsTable,
                 BetaFeedbackTable,
+                AppMigrationsTable,
                 UsersTable,
                 UserSessionsTable,
                 UserEntitlementsTable,
@@ -171,7 +178,89 @@ object DatabaseFactory {
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS capo text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS chords text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS technique text NULL")
+            applyBundledTabMetadataMigration()
         }
+    }
+
+    private fun applyBundledTabMetadataMigration() {
+        val alreadyApplied = !AppMigrationsTable
+            .selectAll()
+            .where { AppMigrationsTable.id eq TabMetadataMigrationId }
+            .empty()
+        if (alreadyApplied) return
+
+        val csvText = Thread.currentThread().contextClassLoader
+            .getResourceAsStream("lesson-tabs-metadata.csv")
+            ?.bufferedReader(Charsets.UTF_8)
+            ?.use { it.readText() }
+            ?: error("Bundled lesson-tabs-metadata.csv resource was not found")
+
+        val rows = parseCsv(csvText, initialDrop = 0)
+        require(rows.isNotEmpty()) { "Bundled lesson-tabs-metadata.csv is empty" }
+
+        val header = rows.first().map { it.trim() }
+        fun idx(name: String): Int = header.indexOfFirst { it.equals(name, ignoreCase = true) }
+
+        val artistIdx = idx("Artist")
+        val songIdx = idx("Song")
+        val tuningIdx = idx("Tuning")
+        val capoIdx = idx("Capo")
+        val chordsIdx = idx("Chords")
+        val techniqueIdx = idx("Technique")
+        require(artistIdx >= 0 && songIdx >= 0 && tuningIdx >= 0 && capoIdx >= 0 && chordsIdx >= 0 && techniqueIdx >= 0) {
+            "Bundled lesson-tabs-metadata.csv must include Artist, Song, Tuning, Capo, Chords, Technique. Found: $header"
+        }
+
+        val artistsByName = ArtistsTable
+            .selectAll()
+            .associate { row -> row[ArtistsTable.name].normalizeArtistLookupText() to row[ArtistsTable.id] }
+
+        val songsByArtist = SongsTable
+            .selectAll()
+            .groupBy { row -> row[SongsTable.artistId] }
+
+        var updatedSongs = 0
+        var skippedRows = 0
+        var missingSongs = 0
+        val missingRows = mutableListOf<String>()
+
+        rows.drop(1).forEach { row ->
+            val artistName = row.getOrNull(artistIdx)?.trim().orEmpty()
+            val songName = row.getOrNull(songIdx)?.trim().orEmpty()
+            if (artistName.isBlank() || songName.isBlank()) {
+                skippedRows++
+                return@forEach
+            }
+
+            val artistId = artistsByName[artistName.normalizeArtistLookupText()]
+            val songRow = artistId?.let {
+                songsByArtist[it]
+                    ?.firstOrNull { song -> song[SongsTable.name].normalizeLookupText() == songName.normalizeLookupText() }
+            }
+
+            if (songRow == null) {
+                missingSongs++
+                if (missingRows.size < 20) missingRows += "$artistName - $songName"
+                return@forEach
+            }
+
+            updatedSongs += SongsTable.update({ SongsTable.id eq songRow[SongsTable.id] }) {
+                it[tuning] = row.getOrNull(tuningIdx).normalizeOptionalText()
+                it[capo] = row.getOrNull(capoIdx).normalizeOptionalText()
+                it[chords] = row.getOrNull(chordsIdx).normalizeOptionalText()
+                it[technique] = row.getOrNull(techniqueIdx).normalizeOptionalText()
+            }
+        }
+
+        AppMigrationsTable.insert {
+            it[id] = TabMetadataMigrationId
+            it[appliedAt] = System.currentTimeMillis()
+        }
+
+        println(
+            "Applied $TabMetadataMigrationId: updatedSongs=$updatedSongs, " +
+                "skippedRows=$skippedRows, missingSongs=$missingSongs, missingRows=${missingRows.joinToString("; ")}"
+        )
     }
 }
 
@@ -215,3 +304,54 @@ fun dbConfigFromEnv(): DbConfig {
         return DbConfig(jdbcUrl, user, pass)
     }
 }
+
+private fun parseCsv(csv: String, initialDrop: Int): List<List<String>> {
+    val lines = csv.split("\n")
+        .drop(initialDrop)
+        .map { it.trimEnd('\r') }
+        .filter { it.isNotBlank() }
+
+    return lines.map { line ->
+        val out = mutableListOf<String>()
+        val sb = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            when {
+                c == '"' -> {
+                    if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+                        sb.append('"')
+                        i++
+                    } else {
+                        inQuotes = !inQuotes
+                    }
+                }
+                c == ',' && !inQuotes -> {
+                    out += sb.toString()
+                    sb.clear()
+                }
+                else -> sb.append(c)
+            }
+            i++
+        }
+        out += sb.toString()
+        out
+    }
+}
+
+private fun String?.normalizeOptionalText(): String? =
+    this
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+
+private fun String.normalizeLookupText(): String =
+    trim()
+        .lowercase()
+        .replace(Regex("\\s+"), " ")
+
+private fun String.normalizeArtistLookupText(): String =
+    normalizeLookupText()
+        .replace("&", "and")
+        .replace(Regex("\\by\\b"), "and")
+        .replace(Regex("\\s+"), " ")
