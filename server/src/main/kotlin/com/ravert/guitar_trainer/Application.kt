@@ -26,6 +26,7 @@ import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
+import java.net.URI
 
 fun main() {
     embeddedServer(Netty, port = SERVER_PORT, host = "0.0.0.0", module = Application::module)
@@ -44,13 +45,9 @@ fun Application.module() {
     // CORS
     install(CORS) {
         // For dev: allow your web app origin
-        allowHost("guitar-trainer-static-site.onrender.com", schemes = listOf("https"))
-        allowHost("dc-frontend-q87t.onrender.com", schemes = listOf("https"))
-        allowHost("dc-frontend-yy6w.onrender.com", schemes = listOf("https"))
-        allowHost("localhost:8080", schemes = listOf("http"))
-        allowHost("127.0.0.1:8080", schemes = listOf("http"))
-        allowHost("localhost:5173", schemes = listOf("http"))
-        allowHost("0.0.0.0:8080")
+        allowedFrontendOrigins().forEach { origin ->
+            allowHost(origin.host, schemes = listOf(origin.scheme))
+        }
 
         allowMethod(HttpMethod.Get)
         allowMethod(HttpMethod.Post)
@@ -97,4 +94,47 @@ fun Application.module() {
             call.respondText("Ktor: ${Greeting().greet()}")
         }
     }
+}
+
+private data class CorsOrigin(val scheme: String, val host: String)
+
+private fun allowedFrontendOrigins(): List<CorsOrigin> {
+    val defaultOrigins = listOf(
+        "https://dc-guitar.com",
+        "https://www.dc-guitar.com",
+        "https://guitar-trainer-static-site.onrender.com",
+        "https://dc-frontend-q87t.onrender.com",
+        "https://dc-frontend-yy6w.onrender.com",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:5173",
+        "http://0.0.0.0:8080",
+    )
+
+    return (defaultOrigins + frontendOriginsFromEnv())
+        .mapNotNull(::parseCorsOrigin)
+        .distinct()
+}
+
+private fun frontendOriginsFromEnv(): List<String> =
+    listOf("FRONTEND_ORIGINS", "FRONTEND_ORIGIN", "APP_PUBLIC_URL")
+        .flatMap { envName ->
+            System.getenv(envName)
+                ?.split(",")
+                ?.map { it.trim() }
+                ?.filter { it.isNotBlank() }
+                ?: emptyList()
+        }
+
+private fun parseCorsOrigin(value: String): CorsOrigin? {
+    val uri = try {
+        URI(value)
+    } catch (_: Exception) {
+        return null
+    }
+
+    val scheme = uri.scheme ?: return null
+    val host = uri.host ?: return null
+    val hostWithPort = if (uri.port == -1) host else "$host:${uri.port}"
+    return CorsOrigin(scheme = scheme, host = hostWithPort)
 }
