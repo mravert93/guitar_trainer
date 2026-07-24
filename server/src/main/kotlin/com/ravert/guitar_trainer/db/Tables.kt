@@ -28,6 +28,10 @@ object SongsTable : Table("songs") {
     val lengthSeconds = integer("length_seconds")
     val bpm = integer("bpm")
     val docUrl = text("doc_url")
+    val tuning = text("tuning").nullable()
+    val capo = text("capo").nullable()
+    val chords = text("chords").nullable()
+    val technique = text("technique").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

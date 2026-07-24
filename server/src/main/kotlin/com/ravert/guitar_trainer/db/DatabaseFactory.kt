@@ -167,6 +167,10 @@ object DatabaseFactory {
                 StripeWebhookEventsTable,
                 YoutubeMembersTable
             )
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS tuning text NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS capo text NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS chords text NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS technique text NULL")
         }
     }
 }

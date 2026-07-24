@@ -59,7 +59,11 @@ data class CreateSongRequest(
     val name: String,
     val lengthSeconds: Int,
     val bpm: Int,
-    val docUrl: String
+    val docUrl: String,
+    val tuning: String? = null,
+    val capo: String? = null,
+    val chords: String? = null,
+    val technique: String? = null,
 )
 
 @Serializable
@@ -119,7 +123,11 @@ fun Application.configureAdminRoutes(
                         req.name,
                         req.lengthSeconds,
                         req.bpm,
-                        req.docUrl
+                        req.docUrl,
+                        req.tuning.normalizeOptionalText(),
+                        req.capo.normalizeOptionalText(),
+                        req.chords.normalizeOptionalText(),
+                        req.technique.normalizeOptionalText(),
                     )
                 )
             }

@@ -26,6 +26,10 @@ data class Song(
     val lengthSeconds: Int, // Seconds
     val bpm: Int,
     val docUrl: String,
+    val tuning: String? = null,
+    val capo: String? = null,
+    val chords: String? = null,
+    val technique: String? = null,
 )
 
 @Serializable

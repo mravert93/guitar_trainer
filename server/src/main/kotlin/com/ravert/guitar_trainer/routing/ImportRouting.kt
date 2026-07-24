@@ -4,25 +4,17 @@ import com.ravert.guitar_trainer.db.LibraryRepository
 import com.ravert.guitar_trainer.db.NewAlbum
 import com.ravert.guitar_trainer.db.NewArtist
 import com.ravert.guitar_trainer.db.NewSong
-import com.ravert.guitar_trainer.guitartrainer.datamodels.Album
-import com.ravert.guitar_trainer.import.AlbumLookupResults
-import com.ravert.guitar_trainer.import.MbRateLimiter
-import com.ravert.guitar_trainer.import.SongTabDetail
 import com.ravert.guitar_trainer.import.deezerLookupTrack
-import com.ravert.guitar_trainer.import.enrichWithMusicBrainzAndCAA
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.request.*
 import io.ktor.server.routing.*
 import io.ktor.http.*
 import io.ktor.client.*
-import io.ktor.client.call.body
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
-import io.ktor.server.http.content.file
 import kotlinx.coroutines.delay
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import java.util.UUID
 import kotlin.String
 
@@ -32,6 +24,14 @@ data class ImportResult(
     val songsUpserted: Int,
     val skippedRows: Int,
     val errors: List<String>
+)
+
+@Serializable
+data class TabMetadataSyncResult(
+    val updatedSongs: Int,
+    val skippedRows: Int,
+    val missingSongs: Int,
+    val errors: List<String>,
 )
 
 fun Application.configureImportRoutes(
@@ -52,12 +52,12 @@ fun Application.configureImportRoutes(
             val header = rows.first().map { it.trim() }
             fun idx(name: String): Int = header.indexOfFirst { it.equals(name, ignoreCase = true) }
 
-            val docIdx = idx("Document Link").takeIf { it >= 0 } ?: idx("Document link")
+            val docIdx = idx("Document Link")
             val fileIdIdx = idx("File ID").takeIf { it >= 0 } ?: idx("File ID")
             val songIdx = idx("Song Title")
             val artistIdx = idx("Artist")
 
-            if (docIdx == null || songIdx < 0 || artistIdx < 0) {
+            if (docIdx < 0 || songIdx < 0 || artistIdx < 0) {
                 return@post call.respond(
                     HttpStatusCode.BadRequest,
                     "CSV must include columns: Song, Artist, Document Link. Found: $header"
@@ -194,68 +194,108 @@ fun Application.configureImportRoutes(
             call.respond(ImportResult(artistsUpserted, songsUpserted, skipped, errors))
         }
 
-        get("/admin/tabDetails") {
-            val csvUrl = "https://docs.google.com/spreadsheets/d/1vt7Ub1EiwC9uPWJxcDiKXkEVM6j3FMOPuNIatSDjUIE/export?format=csv&gid=0"
-
-            val csvText = httpClient.get(csvUrl).bodyAsText()
-
-            val rows = parseCsv(csvText, initialDrop = 0)
-            if (rows.isEmpty()) return@get call.respond(ImportResult(0, 0, 0, listOf("CSV empty")))
-
-            // Normalize header names
-            val header = rows.first().map { it.trim() }
-            fun idx(name: String): Int = header.indexOfFirst { it.equals(name, ignoreCase = true) }
-
-            val songIdx = idx("Song")
-            val artistIdx = idx("Artist")
-            val tuningIdx = idx("Tuning")
-            val capoIdx = idx("Capo")
-            val chordsIdx = idx("Chords")
-            val techniqueIdx = idx("Technique")
-
-            // Existing data
-            val existingArtists = repo.getArtists()
-                .associateBy { it.name.lowercase() }
-            val existingSongs = repo.getSongs()
-                .groupBy { it.artistUuid }
-
-            // Drop header
-            val droppedRows = rows.drop(1)
-            val tabDetails = arrayListOf<SongTabDetail>()
-            droppedRows.forEach { row ->
-                val songName = row.getOrNull(songIdx)?.trim().orEmpty()
-                val artistName = row.getOrNull(artistIdx)?.trim().orEmpty()
-                val tuning = row.getOrNull(tuningIdx)?.trim().orEmpty()
-                val capo = row.getOrNull(capoIdx)?.trim().orEmpty()
-                val chords = row.getOrNull(chordsIdx)?.trim().orEmpty()
-                val technique = row.getOrNull(techniqueIdx)?.trim().orEmpty()
-
-                // Check if song / artist exist
-                val artist = existingArtists[artistName.lowercase()]
-                val songId = artist?.let { artist ->
-                    existingSongs[artist.uuid]
-                        ?.firstOrNull { it.name.equals(songName, ignoreCase = true) }
-                        ?.uuid
-                }
-
-                tabDetails.add(
-                    SongTabDetail(
-                        songId = songId,
-                        artistId = artist?.uuid,
-                        artistName = artistName,
-                        songName = songName,
-                        tuning = tuning,
-                        capo = capo,
-                        chords = chords,
-                        technique = technique,
-                        )
-                )
+        post("/admin/syncTabDetails") {
+            if (!call.hasAdminAuth()) {
+                return@post call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
             }
 
-            val existingTabs = tabDetails.filter { it.songId != null }
-            call.respond(existingTabs)
+            val syncResult = syncTabMetadataFromSpreadsheet(httpClient, repo)
+            call.respond(syncResult)
+        }
+
+        get("/admin/tabDetails") {
+            call.respond(repo.getSongTabDetails())
         }
     }
+}
+
+private suspend fun syncTabMetadataFromSpreadsheet(
+    httpClient: HttpClient,
+    repo: LibraryRepository,
+): TabMetadataSyncResult {
+    val csvUrl = "https://docs.google.com/spreadsheets/d/1vt7Ub1EiwC9uPWJxcDiKXkEVM6j3FMOPuNIatSDjUIE/export?format=csv&gid=0"
+
+    val csvText = httpClient.get(csvUrl).bodyAsText()
+
+    val rows = parseCsv(csvText, initialDrop = 0)
+    if (rows.isEmpty()) return TabMetadataSyncResult(0, 0, 0, listOf("CSV empty"))
+
+    // Normalize header names
+    val header = rows.first().map { it.trim() }
+    fun idx(name: String): Int = header.indexOfFirst { it.equals(name, ignoreCase = true) }
+
+    val songIdx = idx("Song")
+    val artistIdx = idx("Artist")
+    val tuningIdx = idx("Tuning")
+    val capoIdx = idx("Capo")
+    val chordsIdx = idx("Chords")
+    val techniqueIdx = idx("Technique")
+    if (songIdx < 0 || artistIdx < 0 || tuningIdx < 0 || capoIdx < 0 || chordsIdx < 0 || techniqueIdx < 0) {
+        return TabMetadataSyncResult(
+            updatedSongs = 0,
+            skippedRows = 0,
+            missingSongs = 0,
+            errors = listOf("CSV must include columns: Song, Artist, Tuning, Capo, Chords, Technique. Found: $header"),
+        )
+    }
+
+    // Existing data
+    val existingArtists = repo.getArtists()
+        .associateBy { it.name.lowercase() }
+    val existingSongs = repo.getSongs()
+        .groupBy { it.artistUuid }
+
+    // Drop header
+    val droppedRows = rows.drop(1)
+    var updatedSongs = 0
+    var skippedRows = 0
+    var missingSongs = 0
+    val errors = mutableListOf<String>()
+    droppedRows.forEach { row ->
+        try {
+            val songName = row.getOrNull(songIdx)?.trim().orEmpty()
+            val artistName = row.getOrNull(artistIdx)?.trim().orEmpty()
+            val tuning = row.getOrNull(tuningIdx).normalizeOptionalText()
+            val capo = row.getOrNull(capoIdx).normalizeOptionalText()
+            val chords = row.getOrNull(chordsIdx).normalizeOptionalText()
+            val technique = row.getOrNull(techniqueIdx).normalizeOptionalText()
+
+            if (songName.isBlank() || artistName.isBlank()) {
+                skippedRows++
+                return@forEach
+            }
+
+            // Check if song / artist exist
+            val artist = existingArtists[artistName.lowercase()]
+            val songId = artist?.let { artist ->
+                existingSongs[artist.uuid]
+                    ?.firstOrNull { it.name.equals(songName, ignoreCase = true) }
+                    ?.uuid
+            }
+
+            if (songId == null) {
+                missingSongs++
+                return@forEach
+            }
+
+            updatedSongs += repo.updateSongTabMetadata(
+                songUuid = UUID.fromString(songId),
+                tuning = tuning,
+                capo = capo,
+                chords = chords,
+                technique = technique,
+            )
+        } catch (t: Throwable) {
+            errors += "Row failed: ${t.message ?: t}"
+        }
+    }
+
+    return TabMetadataSyncResult(
+        updatedSongs = updatedSongs,
+        skippedRows = skippedRows,
+        missingSongs = missingSongs,
+        errors = errors,
+    )
 }
 
 /**
@@ -292,3 +332,8 @@ fun parseCsv(csv: String, initialDrop: Int): List<List<String>> {
         out
     }
 }
+
+fun String?.normalizeOptionalText(): String? =
+    this
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }

@@ -3,6 +3,7 @@ package com.ravert.guitar_trainer.db
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Album
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Artist
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Song
+import com.ravert.guitar_trainer.import.SongTabDetail
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.selectAll
@@ -29,7 +30,11 @@ data class NewSong(
     val name: String,
     val lengthSeconds: Int = -1,
     val bpm: Int = -1,
-    val docUrl: String
+    val docUrl: String,
+    val tuning: String? = null,
+    val capo: String? = null,
+    val chords: String? = null,
+    val technique: String? = null,
 )
 
 class LibraryRepository {
@@ -90,6 +95,10 @@ class LibraryRepository {
             this[SongsTable.bpm] = it.bpm
             this[SongsTable.lengthSeconds] = it.lengthSeconds
             this[SongsTable.docUrl] = it.docUrl
+            this[SongsTable.tuning] = it.tuning
+            this[SongsTable.capo] = it.capo
+            this[SongsTable.chords] = it.chords
+            this[SongsTable.technique] = it.technique
         }
     }
 
@@ -171,15 +180,7 @@ class LibraryRepository {
             .selectAll()
             .orderBy(SongsTable.name to SortOrder.ASC)
             .map { row ->
-                Song(
-                    uuid = row[SongsTable.id].toString(),
-                    artistUuid = row[SongsTable.artistId].toString(),
-                    albumUuid = row[SongsTable.albumId].toString(),
-                    name = row[SongsTable.name],
-                    lengthSeconds = row[SongsTable.lengthSeconds],
-                    bpm = row[SongsTable.bpm],
-                    docUrl = row[SongsTable.docUrl]
-                )
+                row.toSong()
             }
     }
 
@@ -189,15 +190,7 @@ class LibraryRepository {
             .where { (SongsTable.name eq songName) and (SongsTable.artistId eq artistId) }
             .singleOrNull() ?: return@transaction null
 
-        Song(
-            uuid = row[SongsTable.id].toString(),
-            artistUuid = row[SongsTable.artistId].toString(),
-            albumUuid = row[SongsTable.albumId].toString(),
-            name = row[SongsTable.name],
-            lengthSeconds = row[SongsTable.lengthSeconds],
-            bpm = row[SongsTable.bpm],
-            docUrl = row[SongsTable.docUrl]
-        )
+        row.toSong()
     }
 
     fun updateSong(songUuid: UUID, docUrl: String) {
@@ -215,7 +208,11 @@ class LibraryRepository {
         name: String,
         lengthSeconds: Int,
         bpm: Int,
-        docUrl: String
+        docUrl: String,
+        tuning: String? = null,
+        capo: String? = null,
+        chords: String? = null,
+        technique: String? = null,
     ): Song = transaction {
         if (uuid != null) {
             SongsTable.update({ SongsTable.id eq UUID.fromString(uuid)}) {
@@ -225,8 +222,12 @@ class LibraryRepository {
                 it[SongsTable.lengthSeconds] = lengthSeconds
                 it[SongsTable.bpm] = bpm
                 it[SongsTable.docUrl] = docUrl
+                it[SongsTable.tuning] = tuning
+                it[SongsTable.capo] = capo
+                it[SongsTable.chords] = chords
+                it[SongsTable.technique] = technique
             }
-            Song(uuid, artistId, albumId, name, lengthSeconds, bpm, docUrl)
+            Song(uuid, artistId, albumId, name, lengthSeconds, bpm, docUrl, tuning, capo, chords, technique)
         } else {
             val id = UUID.randomUUID()
             SongsTable.insert {
@@ -237,8 +238,12 @@ class LibraryRepository {
                 it[SongsTable.lengthSeconds] = lengthSeconds
                 it[SongsTable.bpm] = bpm
                 it[SongsTable.docUrl] = docUrl
+                it[SongsTable.tuning] = tuning
+                it[SongsTable.capo] = capo
+                it[SongsTable.chords] = chords
+                it[SongsTable.technique] = technique
             }
-            Song(id.toString(), artistId, albumId, name, lengthSeconds, bpm, docUrl)
+            Song(id.toString(), artistId, albumId, name, lengthSeconds, bpm, docUrl, tuning, capo, chords, technique)
         }
     }
 
@@ -246,16 +251,54 @@ class LibraryRepository {
         SongsTable
             .selectAll().where { SongsTable.id eq UUID.fromString(id) }
             .singleOrNull()
-            ?.let { row ->
-                Song(
-                    uuid = row[SongsTable.id].toString(),
-                    artistUuid = row[SongsTable.artistId].toString(),
-                    albumUuid = row[SongsTable.albumId].toString(),
-                    name = row[SongsTable.name],
-                    lengthSeconds = row[SongsTable.lengthSeconds],
-                    bpm = row[SongsTable.bpm],
-                    docUrl = row[SongsTable.docUrl]
+            ?.toSong()
+    }
+
+    fun updateSongTabMetadata(
+        songUuid: UUID,
+        tuning: String?,
+        capo: String?,
+        chords: String?,
+        technique: String?,
+    ): Int = transaction {
+        SongsTable.update({ SongsTable.id eq songUuid }) {
+            it[SongsTable.tuning] = tuning
+            it[SongsTable.capo] = capo
+            it[SongsTable.chords] = chords
+            it[SongsTable.technique] = technique
+        }
+    }
+
+    fun getSongTabDetails(): List<SongTabDetail> = transaction {
+        SongsTable
+            .join(ArtistsTable, JoinType.INNER, SongsTable.artistId, ArtistsTable.id)
+            .selectAll()
+            .orderBy(ArtistsTable.name to SortOrder.ASC, SongsTable.name to SortOrder.ASC)
+            .map { row ->
+                SongTabDetail(
+                    songId = row[SongsTable.id].toString(),
+                    artistId = row[ArtistsTable.id].toString(),
+                    artistName = row[ArtistsTable.name],
+                    songName = row[SongsTable.name],
+                    tuning = row[SongsTable.tuning].orEmpty(),
+                    capo = row[SongsTable.capo].orEmpty(),
+                    chords = row[SongsTable.chords].orEmpty(),
+                    technique = row[SongsTable.technique].orEmpty(),
                 )
             }
     }
+
+    private fun ResultRow.toSong() = Song(
+        uuid = this[SongsTable.id].toString(),
+        artistUuid = this[SongsTable.artistId].toString(),
+        albumUuid = this[SongsTable.albumId].toString(),
+        name = this[SongsTable.name],
+        lengthSeconds = this[SongsTable.lengthSeconds],
+        bpm = this[SongsTable.bpm],
+        docUrl = this[SongsTable.docUrl],
+        tuning = this[SongsTable.tuning],
+        capo = this[SongsTable.capo],
+        chords = this[SongsTable.chords],
+        technique = this[SongsTable.technique],
+    )
 }
