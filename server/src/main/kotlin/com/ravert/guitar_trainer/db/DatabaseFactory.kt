@@ -137,6 +137,17 @@ object DatabaseFactory {
                 )
                 """.trimIndent()
             )
+            exec(
+                """
+                CREATE TABLE IF NOT EXISTS youtube_member_count_snapshots (
+                    snapshot_date text PRIMARY KEY,
+                    member_count integer NOT NULL,
+                    captured_at bigint NOT NULL,
+                    created_at bigint NOT NULL,
+                    updated_at bigint NOT NULL
+                )
+                """.trimIndent()
+            )
             exec("CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(session_token_hash)")
             exec("CREATE INDEX IF NOT EXISTS idx_user_sessions_user_uuid ON user_sessions(user_uuid)")
             exec("CREATE INDEX IF NOT EXISTS idx_user_entitlements_user_uuid ON user_entitlements(user_uuid)")
@@ -172,7 +183,8 @@ object DatabaseFactory {
                 UserEntitlementsTable,
                 StripeCustomersTable,
                 StripeWebhookEventsTable,
-                YoutubeMembersTable
+                YoutubeMembersTable,
+                YoutubeMemberCountSnapshotsTable
             )
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS tuning text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS capo text NULL")

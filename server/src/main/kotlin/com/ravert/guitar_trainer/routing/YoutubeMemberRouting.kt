@@ -20,6 +20,7 @@ import io.ktor.server.application.ApplicationStopped
 import io.ktor.server.application.log
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
+import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +44,20 @@ private const val YoutubeMembersScope = "https://www.googleapis.com/auth/youtube
 data class YoutubeSyncResponse(
     val success: Boolean,
     val memberCount: Int,
+)
+
+@Serializable
+data class YoutubeMemberCountSnapshotDto(
+    val snapshotDate: String,
+    val memberCount: Int,
+    val capturedAt: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
+@Serializable
+data class YoutubeMemberCountHistoryResponse(
+    val snapshots: List<YoutubeMemberCountSnapshotDto>,
 )
 
 @Serializable
@@ -133,6 +148,28 @@ fun Application.configureYoutubeMemberRoutes(
             call.respond(YoutubeSyncResponse(success = true, memberCount = memberCount))
         }
 
+        get("/admin/youtube/member-count-history") {
+            if (!call.hasAdminAuth()) {
+                return@get call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+            }
+
+            val startDate = call.request.queryParameters["startDate"]?.trim()?.takeIf { it.isNotBlank() }
+            val endDate = call.request.queryParameters["endDate"]?.trim()?.takeIf { it.isNotBlank() }
+            val snapshots = authRepository
+                .listYoutubeMemberCountSnapshots(startDate = startDate, endDate = endDate)
+                .map {
+                    YoutubeMemberCountSnapshotDto(
+                        snapshotDate = it.snapshotDate,
+                        memberCount = it.memberCount,
+                        capturedAt = it.capturedAt,
+                        createdAt = it.createdAt,
+                        updatedAt = it.updatedAt,
+                    )
+                }
+
+            call.respond(YoutubeMemberCountHistoryResponse(snapshots = snapshots))
+        }
+
         post("/admin/youtube/oauth-url") {
             if (!call.hasAdminAuth()) {
                 return@post call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
@@ -168,7 +205,11 @@ suspend fun syncYoutubeMembers(
     httpClient: HttpClient,
 ): Int {
     val accessToken = fetchYoutubeAccessToken(httpClient)
-    val members = fetchYoutubeMembers(httpClient, accessToken)
+    val fetchedMembers = fetchYoutubeMembers(httpClient, accessToken)
+    val memberCount = fetchedMembers
+        .distinctBy { it.youtubeChannelId ?: it.normalizedDisplayName }
+        .size
+    val members = fetchedMembers
         .distinctBy { it.normalizedDisplayName }
     val now = nowMillis()
 
@@ -178,8 +219,13 @@ suspend fun syncYoutubeMembers(
         seenYoutubeChannelIds = members.mapNotNull { it.youtubeChannelId }.toSet(),
         now = now,
     )
+    authRepository.upsertYoutubeMemberCountSnapshot(
+        snapshotDate = snapshotDateForMillis(now),
+        memberCount = memberCount,
+        capturedAt = now,
+    )
 
-    return members.size
+    return memberCount
 }
 
 private suspend fun fetchYoutubeAccessToken(httpClient: HttpClient): String {
@@ -310,6 +356,12 @@ private fun millisUntilNextNightlyRun(): Long {
     }
     return java.time.Duration.between(now, next).toMillis()
 }
+
+private fun snapshotDateForMillis(millis: Long): String =
+    Instant.ofEpochMilli(millis)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+        .toString()
 
 private fun parseIsoInstantMillis(value: String?): Long? =
     value?.let {

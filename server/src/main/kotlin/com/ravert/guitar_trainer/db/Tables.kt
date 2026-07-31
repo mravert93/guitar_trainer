@@ -130,3 +130,13 @@ object YoutubeMembersTable : Table("youtube_members") {
 
     override val primaryKey = PrimaryKey(uuid)
 }
+
+object YoutubeMemberCountSnapshotsTable : Table("youtube_member_count_snapshots") {
+    val snapshotDate = text("snapshot_date")
+    val memberCount = integer("member_count")
+    val capturedAt = long("captured_at")
+    val createdAt = long("created_at")
+    val updatedAt = long("updated_at")
+
+    override val primaryKey = PrimaryKey(snapshotDate)
+}

@@ -47,6 +47,14 @@ data class YoutubeMemberRecord(
     val lastSeenAt: Long? = null,
 )
 
+data class YoutubeMemberCountSnapshotRecord(
+    val snapshotDate: String,
+    val memberCount: Int,
+    val capturedAt: Long,
+    val createdAt: Long,
+    val updatedAt: Long,
+)
+
 data class UserEntitlementRecord(
     val uuid: UUID,
     val userUuid: UUID,
@@ -474,6 +482,37 @@ class AuthRepository {
         }
     }
 
+    fun upsertYoutubeMemberCountSnapshot(snapshotDate: String, memberCount: Int, capturedAt: Long) = transaction {
+        YoutubeMemberCountSnapshotsTable.insertIgnore {
+            it[YoutubeMemberCountSnapshotsTable.snapshotDate] = snapshotDate
+            it[YoutubeMemberCountSnapshotsTable.memberCount] = memberCount
+            it[YoutubeMemberCountSnapshotsTable.capturedAt] = capturedAt
+            it[createdAt] = capturedAt
+            it[updatedAt] = capturedAt
+        }
+        YoutubeMemberCountSnapshotsTable.update({
+            YoutubeMemberCountSnapshotsTable.snapshotDate eq snapshotDate
+        }) {
+            it[YoutubeMemberCountSnapshotsTable.memberCount] = memberCount
+            it[YoutubeMemberCountSnapshotsTable.capturedAt] = capturedAt
+            it[updatedAt] = capturedAt
+        }
+    }
+
+    fun listYoutubeMemberCountSnapshots(
+        startDate: String?,
+        endDate: String?,
+    ): List<YoutubeMemberCountSnapshotRecord> = transaction {
+        YoutubeMemberCountSnapshotsTable
+            .selectAll()
+            .orderBy(YoutubeMemberCountSnapshotsTable.snapshotDate to SortOrder.ASC)
+            .map { it.toYoutubeMemberCountSnapshotRecord() }
+            .filter { snapshot ->
+                (startDate == null || snapshot.snapshotDate >= startDate) &&
+                    (endDate == null || snapshot.snapshotDate <= endDate)
+            }
+    }
+
     fun revokeManualPremium(userUuid: UUID, now: Long): Int = transaction {
         UserEntitlementsTable.update({
             (UserEntitlementsTable.userUuid eq userUuid) and
@@ -514,6 +553,14 @@ class AuthRepository {
         membershipLevelName = this[YoutubeMembersTable.membershipLevelName],
         memberSince = this[YoutubeMembersTable.memberSince],
         lastSeenAt = this[YoutubeMembersTable.lastSeenAt],
+    )
+
+    private fun ResultRow.toYoutubeMemberCountSnapshotRecord() = YoutubeMemberCountSnapshotRecord(
+        snapshotDate = this[YoutubeMemberCountSnapshotsTable.snapshotDate],
+        memberCount = this[YoutubeMemberCountSnapshotsTable.memberCount],
+        capturedAt = this[YoutubeMemberCountSnapshotsTable.capturedAt],
+        createdAt = this[YoutubeMemberCountSnapshotsTable.createdAt],
+        updatedAt = this[YoutubeMemberCountSnapshotsTable.updatedAt],
     )
 
     private fun ResultRow.toUserEntitlementRecord() = UserEntitlementRecord(
