@@ -70,6 +70,12 @@ data class LogoutResponse(
 )
 
 @Serializable
+data class ChangePasswordRequest(
+    val currentPassword: String,
+    val newPassword: String,
+)
+
+@Serializable
 data class ManualPremiumGrantRequest(
     val sourceLabel: String? = null,
     val endsAt: Long? = null,
@@ -258,6 +264,32 @@ fun Application.configureAuthRoutes(authRepository: AuthRepository, httpClient: 
                 }
 
                 call.respond(authRepository.authResponse(updatedUser))
+            }
+
+            post("/change-password") {
+                val user = call.requireUser(authRepository)
+                    ?: return@post call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+
+                val req = call.receive<ChangePasswordRequest>()
+                val passwordValidationError = validatePassword(req.newPassword)
+                if (passwordValidationError != null) {
+                    return@post call.respond(HttpStatusCode.BadRequest, passwordValidationError)
+                }
+
+                if (!verifyPassword(req.currentPassword, user.passwordHash)) {
+                    return@post call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+                }
+
+                val updatedRows = authRepository.updateUserPasswordHash(
+                    userUuid = user.uuid,
+                    passwordHash = hashPassword(req.newPassword),
+                    now = nowMillis(),
+                )
+                if (updatedRows == 0) {
+                    return@post call.respond(HttpStatusCode.NotFound, "User not found")
+                }
+
+                call.respond(SuccessResponse(success = true))
             }
 
             post("/logout") {
@@ -532,6 +564,12 @@ private fun normalizeEmail(email: String): String = email.trim().lowercase()
 private fun validateAuthRequest(email: String, password: String): String? {
     return when {
         !EmailRegex.matches(email) -> "Invalid email"
+        else -> validatePassword(password)
+    }
+}
+
+private fun validatePassword(password: String): String? {
+    return when {
         password.isBlank() -> "Password is required"
         password.length < 8 -> "Password must be at least 8 characters"
         else -> null

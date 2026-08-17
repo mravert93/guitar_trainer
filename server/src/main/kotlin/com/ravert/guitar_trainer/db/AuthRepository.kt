@@ -354,6 +354,13 @@ class AuthRepository {
                 ?.toUserRecord()
         }
 
+    fun updateUserPasswordHash(userUuid: UUID, passwordHash: String, now: Long): Int = transaction {
+        UsersTable.update({ UsersTable.uuid eq userUuid }) {
+            it[UsersTable.passwordHash] = passwordHash
+            it[updatedAt] = now
+        }
+    }
+
     fun findYoutubeMemberByNormalizedName(normalizedDisplayName: String): YoutubeMemberRecord? = transaction {
         YoutubeMembersTable
             .selectAll()
