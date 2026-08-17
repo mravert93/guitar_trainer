@@ -190,6 +190,61 @@ object DatabaseFactory {
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS capo text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS chords text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS technique text NULL")
+            exec(
+                """
+                CREATE TABLE IF NOT EXISTS user_song_favorites (
+                    uuid uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    user_uuid uuid NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
+                    song_uuid uuid NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+                    created_at bigint NOT NULL,
+                    UNIQUE (user_uuid, song_uuid)
+                )
+                """.trimIndent()
+            )
+            exec("ALTER TABLE user_song_favorites ALTER COLUMN uuid SET DEFAULT gen_random_uuid()")
+            exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_song_favorites_user_song ON user_song_favorites(user_uuid, song_uuid)")
+            exec("CREATE INDEX IF NOT EXISTS idx_user_song_favorites_user_uuid ON user_song_favorites(user_uuid)")
+            exec("CREATE INDEX IF NOT EXISTS idx_user_song_favorites_song_uuid ON user_song_favorites(song_uuid)")
+            exec(
+                """
+                CREATE TABLE IF NOT EXISTS song_tab_requests (
+                    uuid uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    requested_by_user_uuid uuid NULL REFERENCES users(uuid) ON DELETE SET NULL,
+                    artist_name text NOT NULL,
+                    song_name text NOT NULL,
+                    normalized_artist_name text NOT NULL,
+                    normalized_song_name text NOT NULL,
+                    details text NULL,
+                    status text NOT NULL,
+                    completed_song_uuid uuid NULL REFERENCES songs(id) ON DELETE SET NULL,
+                    created_at bigint NOT NULL,
+                    updated_at bigint NOT NULL,
+                    completed_at bigint NULL,
+                    CONSTRAINT chk_song_tab_requests_status
+                        CHECK (status IN ('requested', 'in_progress', 'completed')),
+                    UNIQUE (normalized_artist_name, normalized_song_name)
+                )
+                """.trimIndent()
+            )
+            exec(
+                """
+                CREATE TABLE IF NOT EXISTS song_tab_request_votes (
+                    uuid uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    request_uuid uuid NOT NULL REFERENCES song_tab_requests(uuid) ON DELETE CASCADE,
+                    user_uuid uuid NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
+                    created_at bigint NOT NULL,
+                    UNIQUE (request_uuid, user_uuid)
+                )
+                """.trimIndent()
+            )
+            exec("ALTER TABLE song_tab_requests ALTER COLUMN uuid SET DEFAULT gen_random_uuid()")
+            exec("ALTER TABLE song_tab_request_votes ALTER COLUMN uuid SET DEFAULT gen_random_uuid()")
+            exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_song_tab_requests_normalized_names ON song_tab_requests(normalized_artist_name, normalized_song_name)")
+            exec("CREATE INDEX IF NOT EXISTS idx_song_tab_requests_status ON song_tab_requests(status)")
+            exec("CREATE INDEX IF NOT EXISTS idx_song_tab_requests_created_at ON song_tab_requests(created_at)")
+            exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_song_tab_request_votes_request_user ON song_tab_request_votes(request_uuid, user_uuid)")
+            exec("CREATE INDEX IF NOT EXISTS idx_song_tab_request_votes_request_uuid ON song_tab_request_votes(request_uuid)")
+            exec("CREATE INDEX IF NOT EXISTS idx_song_tab_request_votes_user_uuid ON song_tab_request_votes(user_uuid)")
             applyBundledTabMetadataMigration()
         }
     }

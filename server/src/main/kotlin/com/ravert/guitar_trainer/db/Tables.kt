@@ -95,6 +95,49 @@ object UserEntitlementsTable : Table("user_entitlements") {
     override val primaryKey = PrimaryKey(uuid)
 }
 
+object UserSongFavoritesTable : Table("user_song_favorites") {
+    val uuid = uuid("uuid")
+    val userUuid = reference("user_uuid", UsersTable.uuid, onDelete = ReferenceOption.CASCADE)
+    val songUuid = reference("song_uuid", SongsTable.id, onDelete = ReferenceOption.CASCADE)
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(uuid)
+}
+
+object SongTabRequestsTable : Table("song_tab_requests") {
+    val uuid = uuid("uuid")
+    val requestedByUserUuid = reference(
+        "requested_by_user_uuid",
+        UsersTable.uuid,
+        onDelete = ReferenceOption.SET_NULL,
+    ).nullable()
+    val artistName = text("artist_name")
+    val songName = text("song_name")
+    val normalizedArtistName = text("normalized_artist_name")
+    val normalizedSongName = text("normalized_song_name")
+    val details = text("details").nullable()
+    val status = text("status")
+    val completedSongUuid = reference(
+        "completed_song_uuid",
+        SongsTable.id,
+        onDelete = ReferenceOption.SET_NULL,
+    ).nullable()
+    val createdAt = long("created_at")
+    val updatedAt = long("updated_at")
+    val completedAt = long("completed_at").nullable()
+
+    override val primaryKey = PrimaryKey(uuid)
+}
+
+object SongTabRequestVotesTable : Table("song_tab_request_votes") {
+    val uuid = uuid("uuid")
+    val requestUuid = reference("request_uuid", SongTabRequestsTable.uuid, onDelete = ReferenceOption.CASCADE)
+    val userUuid = reference("user_uuid", UsersTable.uuid, onDelete = ReferenceOption.CASCADE)
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(uuid)
+}
+
 object StripeCustomersTable : Table("stripe_customers") {
     val uuid = uuid("uuid")
     val userUuid = reference("user_uuid", UsersTable.uuid, onDelete = ReferenceOption.CASCADE)

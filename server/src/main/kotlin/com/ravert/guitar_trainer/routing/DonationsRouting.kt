@@ -9,9 +9,11 @@ import com.stripe.model.Event
 import com.stripe.model.Invoice
 import com.stripe.model.StripeObject
 import com.stripe.model.Subscription
+import com.stripe.model.billingportal.Session as BillingPortalSession
 import com.stripe.model.checkout.Session
 import com.stripe.net.Webhook
 import com.stripe.param.CustomerCreateParams
+import com.stripe.param.billingportal.SessionCreateParams as BillingPortalSessionCreateParams
 import com.stripe.param.checkout.SessionCreateParams
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -32,6 +34,16 @@ data class CreateDonationSessionRequest(
 
 @Serializable
 data class CreateDonationSessionResponse(
+    val url: String,
+)
+
+@Serializable
+data class CreateBillingPortalSessionRequest(
+    val returnPath: String? = null,
+)
+
+@Serializable
+data class CreateBillingPortalSessionResponse(
     val url: String,
 )
 
@@ -84,6 +96,30 @@ fun Application.configureDonationRouting(authRepository: AuthRepository) {
             call.respond(CreateDonationSessionResponse(session.url))
         }
 
+        post("/stripe/create-billing-portal-session") {
+            if (secretKey.isNullOrBlank()) {
+                return@post call.respond(HttpStatusCode.InternalServerError, "Stripe is not configured")
+            }
+            if (publicUrl.isNullOrBlank()) {
+                return@post call.respond(HttpStatusCode.InternalServerError, "APP_PUBLIC_URL is not configured")
+            }
+
+            val user = call.requireUser(authRepository)
+                ?: return@post call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+            val stripeCustomer = authRepository.findStripeCustomerByUserUuid(user.uuid)
+                ?: return@post call.respond(HttpStatusCode.NotFound, "Stripe customer not found")
+            val req = call.receive<CreateBillingPortalSessionRequest>()
+
+            val session = BillingPortalSession.create(
+                BillingPortalSessionCreateParams.builder()
+                    .setCustomer(stripeCustomer.stripeCustomerId)
+                    .setReturnUrl(buildBillingPortalReturnUrl(publicUrl, req.returnPath))
+                    .build()
+            )
+
+            call.respond(CreateBillingPortalSessionResponse(session.url))
+        }
+
         post("/stripe/webhook") {
             if (webhookSecret.isNullOrBlank()) {
                 return@post call.respond(HttpStatusCode.InternalServerError, "Stripe webhook is not configured")
@@ -108,6 +144,15 @@ fun Application.configureDonationRouting(authRepository: AuthRepository) {
             call.respond(SuccessResponse(success = true))
         }
     }
+}
+
+private fun buildBillingPortalReturnUrl(publicUrl: String, returnPath: String?): String {
+    val safeReturnPath = returnPath
+        ?.trim()
+        ?.takeIf { it.startsWith("/") && !it.startsWith("//") }
+        ?: "/account"
+
+    return publicUrl.trimEnd('/') + safeReturnPath
 }
 
 private fun getOrCreateStripeCustomer(authRepository: AuthRepository, user: UserRecord, now: Long): String {
@@ -214,15 +259,7 @@ private fun processStripeWebhookEvent(authRepository: AuthRepository, event: Eve
         "invoice.paid" -> {
             val invoice = event.stripeObject() as? Invoice ?: return
             val subscription = invoice.subscription?.let { Subscription.retrieve(it) } ?: return
-            linkStripeSubscription(authRepository, subscription)
-            val userUuid = stripeUserUuid(authRepository, subscription) ?: return
-            authRepository.activateStripePremium(
-                userUuid = userUuid,
-                stripeSubscriptionId = subscription.id,
-                subscriptionStatus = subscription.status,
-                currentPeriodEnd = subscription.currentPeriodEndMillis(),
-                now = nowMillis(),
-            )
+            handleSubscriptionState(authRepository, subscription)
         }
 
         "invoice.payment_failed" -> {
@@ -246,6 +283,7 @@ private fun handleCheckoutSessionCompleted(authRepository: AuthRepository, sessi
         currentPeriodEnd = subscription?.currentPeriodEndMillis(),
         now = nowMillis(),
     )
+    subscription?.let { handleSubscriptionState(authRepository, it) }
 }
 
 private fun handleSubscriptionState(authRepository: AuthRepository, subscription: Subscription) {
@@ -254,13 +292,19 @@ private fun handleSubscriptionState(authRepository: AuthRepository, subscription
 
     when (subscription.status) {
         "active",
-        "trialing" -> authRepository.activateStripePremium(
-            userUuid = userUuid,
-            stripeSubscriptionId = subscription.id,
-            subscriptionStatus = subscription.status,
-            currentPeriodEnd = subscription.currentPeriodEndMillis(),
-            now = nowMillis(),
-        )
+        "trialing" -> {
+            if (subscription.isCancelingAtPeriodEnd()) {
+                authRepository.deactivateStripePremium(subscription.id, nowMillis())
+            } else {
+                authRepository.activateStripePremium(
+                    userUuid = userUuid,
+                    stripeSubscriptionId = subscription.id,
+                    subscriptionStatus = subscription.status,
+                    currentPeriodEnd = subscription.currentPeriodEndMillis(),
+                    now = nowMillis(),
+                )
+            }
+        }
 
         "canceled",
         "unpaid",
@@ -308,6 +352,8 @@ private fun Event.stripeObject(): StripeObject? =
             null
         }
     }
+
+private fun Subscription.isCancelingAtPeriodEnd(): Boolean = cancelAtPeriodEnd == true
 
 private fun Subscription.currentPeriodEndMillis(): Long? = currentPeriodEnd?.times(1000L)
 
