@@ -1,5 +1,6 @@
 package com.ravert.guitar_trainer.routing
 
+import com.ravert.guitar_trainer.db.AuthRepository
 import com.ravert.guitar_trainer.db.LibraryRepository
 import com.ravert.guitar_trainer.db.NewAlbum
 import com.ravert.guitar_trainer.db.NewArtist
@@ -39,6 +40,7 @@ data class TabMetadataSyncResult(
 fun Application.configureImportRoutes(
     httpClient: HttpClient,
     repo: LibraryRepository,
+    authRepository: AuthRepository,
 ) {
     routing {
         post("/admin/importSheet") {
@@ -206,7 +208,10 @@ fun Application.configureImportRoutes(
         }
 
         get("/admin/tabDetails") {
-            call.respond(repo.getSongTabDetails())
+            val user = call.requireUser(authRepository)
+            val includeUnreleased = call.hasAdminAuth() ||
+                (user != null && authRepository.userHasPremium(user.uuid))
+            call.respond(repo.getSongTabDetails(includeUnreleased = includeUnreleased))
         }
     }
 }

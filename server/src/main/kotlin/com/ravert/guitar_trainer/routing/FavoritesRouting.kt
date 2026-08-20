@@ -5,6 +5,7 @@ import com.ravert.guitar_trainer.db.AuthRepository
 import com.ravert.guitar_trainer.db.FavoriteSongRecord
 import com.ravert.guitar_trainer.db.FavoritesRepository
 import com.ravert.guitar_trainer.db.FreeFavoriteLimit
+import com.ravert.guitar_trainer.db.isPublicAt
 import com.ravert.guitar_trainer.guitartrainer.datamodels.Song
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -90,6 +91,11 @@ fun Application.configureFavoriteRoutes(
                     )
 
                     AddFavoriteResult.SONG_NOT_FOUND -> call.respond(HttpStatusCode.NotFound, "Song not found")
+
+                    AddFavoriteResult.PREMIUM_REQUIRED -> call.respond(
+                        HttpStatusCode.Forbidden,
+                        "Premium access required",
+                    )
                 }
             }
 
@@ -112,7 +118,10 @@ private suspend fun favoritesResponse(
     userUuid: UUID,
 ): FavoritesResponse {
     val hasPremium = authRepository.userHasPremium(userUuid)
-    val favorites = favoritesRepository.listFavorites(userUuid).map(FavoriteSongRecord::toDto)
+    val favorites = favoritesRepository
+        .listFavorites(userUuid)
+        .filter { hasPremium || it.song.isPublicAt() }
+        .map(FavoriteSongRecord::toDto)
     val remainingFavorites = if (hasPremium) null else (FreeFavoriteLimit - favorites.size).coerceAtLeast(0)
     return FavoritesResponse(
         favorites = favorites,

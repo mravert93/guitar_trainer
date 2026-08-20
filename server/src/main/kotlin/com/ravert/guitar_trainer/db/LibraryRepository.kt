@@ -36,6 +36,9 @@ data class NewSong(
     val capo: String? = null,
     val chords: String? = null,
     val technique: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = createdAt,
+    val releaseAt: Long? = null,
 )
 
 @Serializable
@@ -54,7 +57,25 @@ data class LibrarySearchResult(
     val capo: String?,
     val chords: String?,
     val technique: String?,
+    val createdAt: Long?,
+    val updatedAt: Long?,
     val matchFields: List<String>,
+)
+
+data class NewestTabRecord(
+    val song: Song,
+    val artistName: String,
+    val artistImageUrl: String?,
+    val albumName: String?,
+    val albumImageUrl: String?,
+)
+
+data class SongVideoRecord(
+    val song: Song,
+    val publicId: String?,
+    val format: String?,
+    val version: Long?,
+    val durationSeconds: Double?,
 )
 
 class LibraryRepository {
@@ -119,6 +140,9 @@ class LibraryRepository {
             this[SongsTable.capo] = it.capo
             this[SongsTable.chords] = it.chords
             this[SongsTable.technique] = it.technique
+            this[SongsTable.createdAt] = it.createdAt
+            this[SongsTable.updatedAt] = it.updatedAt
+            this[SongsTable.releaseAt] = it.releaseAt
         }
     }
 
@@ -195,12 +219,51 @@ class LibraryRepository {
         ArtistsTable.deleteWhere { ArtistsTable.id eq artistId }
     }
 
-    fun getSongs(): List<Song> = transaction {
+    fun getSongs(includeUnreleased: Boolean = true, now: Long = System.currentTimeMillis()): List<Song> = transaction {
         SongsTable
             .selectAll()
             .orderBy(SongsTable.name to SortOrder.ASC)
+            .map { it.toSong() }
+            .filter { includeUnreleased || it.isPublicAt(now) }
+    }
+
+    fun getNewestTabs(createdSince: Long, limit: Int, now: Long = System.currentTimeMillis()): List<NewestTabRecord> = transaction {
+        SongsTable
+            .join(ArtistsTable, JoinType.INNER, SongsTable.artistId, ArtistsTable.id)
+            .join(AlbumsTable, JoinType.LEFT, SongsTable.albumId, AlbumsTable.id)
+            .selectAll()
+            .where {
+                (SongsTable.createdAt greaterEq createdSince) and
+                    (SongsTable.releaseAt.isNull() or (SongsTable.releaseAt lessEq now))
+            }
+            .orderBy(SongsTable.createdAt to SortOrder.DESC)
+            .limit(limit)
             .map { row ->
-                row.toSong()
+                NewestTabRecord(
+                    song = row.toSong(),
+                    artistName = row[ArtistsTable.name],
+                    artistImageUrl = row[ArtistsTable.imageUrl],
+                    albumName = row.getOrNull(AlbumsTable.name),
+                    albumImageUrl = row.getOrNull(AlbumsTable.imageUrl),
+                )
+            }
+    }
+
+    fun getUpcomingTabs(now: Long = System.currentTimeMillis()): List<NewestTabRecord> = transaction {
+        SongsTable
+            .join(ArtistsTable, JoinType.INNER, SongsTable.artistId, ArtistsTable.id)
+            .join(AlbumsTable, JoinType.LEFT, SongsTable.albumId, AlbumsTable.id)
+            .selectAll()
+            .where { SongsTable.releaseAt greater now }
+            .orderBy(SongsTable.releaseAt to SortOrder.ASC)
+            .map { row ->
+                NewestTabRecord(
+                    song = row.toSong(),
+                    artistName = row[ArtistsTable.name],
+                    artistImageUrl = row[ArtistsTable.imageUrl],
+                    albumName = row.getOrNull(AlbumsTable.name),
+                    albumImageUrl = row.getOrNull(AlbumsTable.imageUrl),
+                )
             }
     }
 
@@ -217,6 +280,7 @@ class LibraryRepository {
         transaction {
             SongsTable.update({ SongsTable.id eq songUuid }) {
                 it[SongsTable.docUrl] = docUrl
+                it[SongsTable.updatedAt] = System.currentTimeMillis()
             }
         }
     }
@@ -233,9 +297,12 @@ class LibraryRepository {
         capo: String? = null,
         chords: String? = null,
         technique: String? = null,
+        releaseAt: Long? = null,
     ): Song = transaction {
+        val now = System.currentTimeMillis()
         if (uuid != null) {
-            SongsTable.update({ SongsTable.id eq UUID.fromString(uuid)}) {
+            val songUuid = UUID.fromString(uuid)
+            SongsTable.update({ SongsTable.id eq songUuid}) {
                 it[SongsTable.artistId] = UUID.fromString(artistId)
                 it[SongsTable.albumId] = UUID.fromString(albumId)
                 it[SongsTable.name] = name
@@ -246,8 +313,12 @@ class LibraryRepository {
                 it[SongsTable.capo] = capo
                 it[SongsTable.chords] = chords
                 it[SongsTable.technique] = technique
+                it[SongsTable.updatedAt] = now
             }
-            Song(uuid, artistId, albumId, name, lengthSeconds, bpm, docUrl, tuning, capo, chords, technique)
+            SongsTable.selectAll()
+                .where { SongsTable.id eq songUuid }
+                .single()
+                .toSong()
         } else {
             val id = UUID.randomUUID()
             SongsTable.insert {
@@ -262,8 +333,26 @@ class LibraryRepository {
                 it[SongsTable.capo] = capo
                 it[SongsTable.chords] = chords
                 it[SongsTable.technique] = technique
+                it[SongsTable.releaseAt] = releaseAt
+                it[SongsTable.createdAt] = now
+                it[SongsTable.updatedAt] = now
             }
-            Song(id.toString(), artistId, albumId, name, lengthSeconds, bpm, docUrl, tuning, capo, chords, technique)
+            Song(
+                uuid = id.toString(),
+                artistUuid = artistId,
+                albumUuid = albumId,
+                name = name,
+                lengthSeconds = lengthSeconds,
+                bpm = bpm,
+                docUrl = docUrl,
+                tuning = tuning,
+                capo = capo,
+                chords = chords,
+                technique = technique,
+                createdAt = now,
+                updatedAt = now,
+                releaseAt = releaseAt,
+            )
         }
     }
 
@@ -272,6 +361,83 @@ class LibraryRepository {
             .selectAll().where { SongsTable.id eq UUID.fromString(id) }
             .singleOrNull()
             ?.toSong()
+    }
+
+    fun findSongByDocUrl(docUrl: String): Song? = transaction {
+        SongsTable
+            .selectAll()
+            .where { SongsTable.docUrl eq docUrl }
+            .limit(1)
+            .singleOrNull()
+            ?.toSong()
+    }
+
+    fun findSongByGoogleDocId(docId: String): Song? = transaction {
+        SongsTable
+            .selectAll()
+            .where { SongsTable.docUrl like "%/document/d/$docId%" }
+            .limit(1)
+            .singleOrNull()
+            ?.toSong()
+    }
+
+    fun getSongVideo(songUuid: UUID): SongVideoRecord? = transaction {
+        SongsTable
+            .selectAll()
+            .where { SongsTable.id eq songUuid }
+            .singleOrNull()
+            ?.toSongVideoRecord()
+    }
+
+    fun updateSongReleaseAt(songUuid: UUID, releaseAt: Long?): SongVideoRecord? = transaction {
+        val updated = SongsTable.update({ SongsTable.id eq songUuid }) {
+            it[SongsTable.releaseAt] = releaseAt
+            it[SongsTable.updatedAt] = System.currentTimeMillis()
+        }
+        if (updated == 0) return@transaction null
+
+        SongsTable.selectAll()
+            .where { SongsTable.id eq songUuid }
+            .single()
+            .toSongVideoRecord()
+    }
+
+    fun registerSongVideo(
+        songUuid: UUID,
+        publicId: String,
+        format: String,
+        version: Long?,
+        durationSeconds: Double?,
+    ): SongVideoRecord? = transaction {
+        val updated = SongsTable.update({ SongsTable.id eq songUuid }) {
+            it[cloudinaryVideoPublicId] = publicId
+            it[cloudinaryVideoFormat] = format
+            it[cloudinaryVideoVersion] = version
+            it[cloudinaryVideoDurationSeconds] = durationSeconds
+            it[updatedAt] = System.currentTimeMillis()
+        }
+        if (updated == 0) return@transaction null
+
+        SongsTable.selectAll()
+            .where { SongsTable.id eq songUuid }
+            .single()
+            .toSongVideoRecord()
+    }
+
+    fun removeSongVideo(songUuid: UUID): SongVideoRecord? = transaction {
+        val updated = SongsTable.update({ SongsTable.id eq songUuid }) {
+            it[cloudinaryVideoPublicId] = null
+            it[cloudinaryVideoFormat] = null
+            it[cloudinaryVideoVersion] = null
+            it[cloudinaryVideoDurationSeconds] = null
+            it[updatedAt] = System.currentTimeMillis()
+        }
+        if (updated == 0) return@transaction null
+
+        SongsTable.selectAll()
+            .where { SongsTable.id eq songUuid }
+            .single()
+            .toSongVideoRecord()
     }
 
     fun updateSongTabMetadata(
@@ -286,14 +452,19 @@ class LibraryRepository {
             it[SongsTable.capo] = capo
             it[SongsTable.chords] = chords
             it[SongsTable.technique] = technique
+            it[SongsTable.updatedAt] = System.currentTimeMillis()
         }
     }
 
-    fun getSongTabDetails(): List<SongTabDetail> = transaction {
+    fun getSongTabDetails(
+        includeUnreleased: Boolean = true,
+        now: Long = System.currentTimeMillis(),
+    ): List<SongTabDetail> = transaction {
         SongsTable
             .join(ArtistsTable, JoinType.INNER, SongsTable.artistId, ArtistsTable.id)
             .selectAll()
             .orderBy(ArtistsTable.name to SortOrder.ASC, SongsTable.name to SortOrder.ASC)
+            .filter { includeUnreleased || it[SongsTable.releaseAt]?.let { releaseAt -> releaseAt <= now } != false }
             .map { row ->
                 SongTabDetail(
                     songId = row[SongsTable.id].toString(),
@@ -308,7 +479,12 @@ class LibraryRepository {
             }
     }
 
-    fun search(query: String, limit: Int): List<LibrarySearchResult> = transaction {
+    fun search(
+        query: String,
+        limit: Int,
+        includeUnreleased: Boolean = false,
+        now: Long = System.currentTimeMillis(),
+    ): List<LibrarySearchResult> = transaction {
         val normalizedQuery = query.trim().lowercase()
         if (normalizedQuery.isBlank()) return@transaction emptyList()
 
@@ -333,6 +509,8 @@ class LibraryRepository {
                     capo = null,
                     chords = null,
                     technique = null,
+                    createdAt = null,
+                    updatedAt = null,
                     matchFields = listOf("artistName"),
                 )
             }
@@ -341,6 +519,7 @@ class LibraryRepository {
             .join(ArtistsTable, JoinType.INNER, SongsTable.artistId, ArtistsTable.id)
             .selectAll()
             .mapNotNull { row ->
+                if (!includeUnreleased && !row.toSong().isPublicAt(now)) return@mapNotNull null
                 val songName = row[SongsTable.name]
                 val artistName = row[ArtistsTable.name]
                 val tuning = row[SongsTable.tuning]
@@ -372,6 +551,8 @@ class LibraryRepository {
                     capo = capo,
                     chords = chords,
                     technique = technique,
+                    createdAt = row[SongsTable.createdAt],
+                    updatedAt = row[SongsTable.updatedAt],
                     matchFields = matchFields,
                 )
             }
@@ -393,8 +574,23 @@ class LibraryRepository {
         capo = this[SongsTable.capo],
         chords = this[SongsTable.chords],
         technique = this[SongsTable.technique],
+        createdAt = this[SongsTable.createdAt],
+        updatedAt = this[SongsTable.updatedAt],
+        releaseAt = this[SongsTable.releaseAt],
+        hasVideo = this[SongsTable.cloudinaryVideoPublicId] != null,
+    )
+
+    private fun ResultRow.toSongVideoRecord() = SongVideoRecord(
+        song = toSong(),
+        publicId = this[SongsTable.cloudinaryVideoPublicId],
+        format = this[SongsTable.cloudinaryVideoFormat],
+        version = this[SongsTable.cloudinaryVideoVersion],
+        durationSeconds = this[SongsTable.cloudinaryVideoDurationSeconds],
     )
 }
+
+fun Song.isPublicAt(now: Long = System.currentTimeMillis()): Boolean =
+    releaseAt?.let { it <= now } ?: true
 
 private fun String?.matchesSearch(normalizedQuery: String): Boolean =
     this?.lowercase()?.contains(normalizedQuery) == true

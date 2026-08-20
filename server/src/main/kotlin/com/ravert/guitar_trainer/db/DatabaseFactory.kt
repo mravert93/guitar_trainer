@@ -190,6 +190,17 @@ object DatabaseFactory {
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS capo text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS chords text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS technique text NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS created_at bigint NOT NULL DEFAULT 0")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS updated_at bigint NOT NULL DEFAULT 0")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS release_at bigint NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS cloudinary_video_public_id text NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS cloudinary_video_format text NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS cloudinary_video_version bigint NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS cloudinary_video_duration_seconds double precision NULL")
+            exec("CREATE INDEX IF NOT EXISTS idx_songs_release_at ON songs(release_at)")
+            val existingSongBackfillTime = System.currentTimeMillis() - (30L * 24L * 60L * 60L * 1000L)
+            exec("UPDATE songs SET created_at = $existingSongBackfillTime WHERE created_at = 0")
+            exec("UPDATE songs SET updated_at = created_at WHERE updated_at = 0")
             exec(
                 """
                 CREATE TABLE IF NOT EXISTS user_song_favorites (

@@ -30,6 +30,10 @@ data class Song(
     val capo: String? = null,
     val chords: String? = null,
     val technique: String? = null,
+    val createdAt: Long = 0,
+    val updatedAt: Long = 0,
+    val releaseAt: Long? = null,
+    val hasVideo: Boolean = false,
 )
 
 @Serializable

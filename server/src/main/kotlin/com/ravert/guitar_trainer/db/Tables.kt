@@ -32,6 +32,13 @@ object SongsTable : Table("songs") {
     val capo = text("capo").nullable()
     val chords = text("chords").nullable()
     val technique = text("technique").nullable()
+    val createdAt = long("created_at").default(0L)
+    val updatedAt = long("updated_at").default(0L)
+    val releaseAt = long("release_at").nullable()
+    val cloudinaryVideoPublicId = text("cloudinary_video_public_id").nullable()
+    val cloudinaryVideoFormat = text("cloudinary_video_format").nullable()
+    val cloudinaryVideoVersion = long("cloudinary_video_version").nullable()
+    val cloudinaryVideoDurationSeconds = double("cloudinary_video_duration_seconds").nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

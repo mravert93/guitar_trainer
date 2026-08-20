@@ -1,6 +1,8 @@
 package com.ravert.guitar_trainer.routing
 
+import com.ravert.guitar_trainer.db.AuthRepository
 import com.ravert.guitar_trainer.db.LibraryRepository
+import com.ravert.guitar_trainer.db.isPublicAt
 import com.ravert.guitar_trainer.youtube.fetchLatestNonShortNonLiveUnder50Min
 import io.ktor.client.HttpClient
 import io.ktor.client.request.get
@@ -64,6 +66,7 @@ data class CreateSongRequest(
     val capo: String? = null,
     val chords: String? = null,
     val technique: String? = null,
+    val releaseAt: Long? = null,
 )
 
 @Serializable
@@ -82,7 +85,8 @@ data class SearchResponse(
 
 fun Application.configureAdminRoutes(
     httpClient: HttpClient,
-    repo: LibraryRepository
+    repo: LibraryRepository,
+    authRepository: AuthRepository,
 ) {
     routing {
         route("/artists") {
@@ -117,9 +121,15 @@ fun Application.configureAdminRoutes(
 
         route("/songs") {
             get {
-                call.respond(repo.getSongs())
+                val user = call.requireUser(authRepository)
+                val includeUnreleased = call.hasAdminAuth() ||
+                    (user != null && authRepository.userHasPremium(user.uuid))
+                call.respond(repo.getSongs(includeUnreleased = includeUnreleased))
             }
             post {
+                if (!call.hasAdminAuth()) {
+                    return@post call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+                }
                 val req = call.receive<CreateSongRequest>()
                 call.respond(
                     repo.addSong(
@@ -134,10 +144,14 @@ fun Application.configureAdminRoutes(
                         req.capo.normalizeOptionalText(),
                         req.chords.normalizeOptionalText(),
                         req.technique.normalizeOptionalText(),
+                        req.releaseAt,
                     )
                 )
             }
             delete {
+                if (!call.hasAdminAuth()) {
+                    return@delete call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
+                }
                 val req = call.receive<DeleteRequest>()
                 repo.deleteSong(UUID.fromString(req.uuid))
                 call.respond(HttpStatusCode.OK)
@@ -150,6 +164,7 @@ fun Application.configureAdminRoutes(
             if (song == null) {
                 call.respondText("Not found", status = io.ktor.http.HttpStatusCode.NotFound)
             } else {
+                if (!call.requireSongAccess(song, authRepository)) return@get
                 call.respond(song)
             }
         }
@@ -165,7 +180,15 @@ fun Application.configureAdminRoutes(
                 return@get call.respond(SearchResponse(query = query, results = emptyList()))
             }
 
-            call.respond(SearchResponse(query = query, results = repo.search(query, limit)))
+            val user = call.requireUser(authRepository)
+            val includeUnreleased = call.hasAdminAuth() ||
+                (user != null && authRepository.userHasPremium(user.uuid))
+            call.respond(
+                SearchResponse(
+                    query = query,
+                    results = repo.search(query, limit, includeUnreleased = includeUnreleased),
+                )
+            )
         }
 
         get("/youtube/latest") {
@@ -240,6 +263,14 @@ fun Application.configureAdminRoutes(
                 ?: return@get call.respondText("Missing url", status = HttpStatusCode.BadRequest)
 
             val requestedUrl = URLDecoder.decode(encoded, UTF_8.name())
+            val song = googleDocId(requestedUrl)?.let(repo::findSongByGoogleDocId)
+                ?: repo.findSongByDocUrl(requestedUrl)
+            if (song != null && !call.requireSongAccess(song, authRepository)) return@get
+            val cacheControl = if (song != null && !song.isPublicAt()) {
+                "private, no-store"
+            } else {
+                "public, max-age=300"
+            }
             val targets = googleDocFetchTargets(requestedUrl)
             if (targets == null) {
                 return@get call.respondText("Unsupported doc url", status = HttpStatusCode.BadRequest)
@@ -264,7 +295,7 @@ fun Application.configureAdminRoutes(
                     if (target.isPublishedDoc) {
                         val text = extractPublishedGoogleDocText(body)
                         if (text != null) {
-                            call.response.headers.append(HttpHeaders.CacheControl, "public, max-age=300")
+                            call.response.headers.append(HttpHeaders.CacheControl, cacheControl)
                             return@get call.respondText(text, ContentType.Text.Plain)
                         }
 
@@ -289,7 +320,7 @@ fun Application.configureAdminRoutes(
                         continue
                     }
 
-                    call.response.headers.append(HttpHeaders.CacheControl, "public, max-age=300")
+                    call.response.headers.append(HttpHeaders.CacheControl, cacheControl)
                     return@get call.respondText(body, ContentType.Text.Plain)
                 }
 
@@ -364,8 +395,7 @@ private fun googleDocFetchTargets(value: String): List<GoogleDocFetchTarget>? {
 
     if (uri.scheme != "https" || uri.host != "docs.google.com") return null
 
-    val docId = Regex("^/document/d/([^/]+)").find(uri.path)?.groupValues?.getOrNull(1)
-        ?: return null
+    val docId = googleDocId(uri) ?: return null
 
     val pubTarget = GoogleDocFetchTarget(
         url = "https://docs.google.com/document/d/$docId/pub",
@@ -381,6 +411,20 @@ private fun googleDocFetchTargets(value: String): List<GoogleDocFetchTarget>? {
         uri.path.endsWith("/export") -> listOf(exportTarget)
         else -> listOf(pubTarget, exportTarget)
     }
+}
+
+private fun googleDocId(value: String): String? = try {
+    googleDocId(URI(value))
+} catch (_: Exception) {
+    null
+}
+
+private fun googleDocId(uri: URI): String? {
+    if (uri.scheme != "https" || uri.host != "docs.google.com") return null
+    return Regex("^/document/d/([A-Za-z0-9_-]+)")
+        .find(uri.path)
+        ?.groupValues
+        ?.getOrNull(1)
 }
 
 private fun isAllowedGoogleDocResponseHost(host: String, target: GoogleDocFetchTarget): Boolean {

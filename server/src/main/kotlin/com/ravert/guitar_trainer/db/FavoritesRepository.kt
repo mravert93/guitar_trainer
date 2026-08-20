@@ -27,6 +27,7 @@ enum class AddFavoriteResult {
     ALREADY_FAVORITED,
     LIMIT_REACHED,
     SONG_NOT_FOUND,
+    PREMIUM_REQUIRED,
 }
 
 class FavoritesRepository {
@@ -55,12 +56,15 @@ class FavoritesRepository {
             .singleOrNull()
             ?: return@transaction AddFavoriteResult.SONG_NOT_FOUND
 
-        val songExists = !SongsTable
+        val song = SongsTable
             .selectAll()
             .where { SongsTable.id eq songUuid }
             .limit(1)
-            .empty()
-        if (!songExists) return@transaction AddFavoriteResult.SONG_NOT_FOUND
+            .singleOrNull()
+            ?: return@transaction AddFavoriteResult.SONG_NOT_FOUND
+        if (!hasPremium && !song.toFavoriteSong().isPublicAt(now)) {
+            return@transaction AddFavoriteResult.PREMIUM_REQUIRED
+        }
 
         val alreadyFavorited = !UserSongFavoritesTable
             .selectAll()
@@ -97,7 +101,14 @@ class FavoritesRepository {
     }
 
     private fun ResultRow.toFavoriteSongRecord() = FavoriteSongRecord(
-        song = Song(
+        song = toFavoriteSong(),
+        artistName = this[ArtistsTable.name],
+        artistImageUrl = this[ArtistsTable.imageUrl],
+        albumName = this.getOrNull(AlbumsTable.name),
+        favoritedAt = this[UserSongFavoritesTable.createdAt],
+    )
+
+    private fun ResultRow.toFavoriteSong() = Song(
             uuid = this[SongsTable.id].toString(),
             artistUuid = this[SongsTable.artistId].toString(),
             albumUuid = this[SongsTable.albumId].toString(),
@@ -109,11 +120,10 @@ class FavoritesRepository {
             capo = this[SongsTable.capo],
             chords = this[SongsTable.chords],
             technique = this[SongsTable.technique],
-        ),
-        artistName = this[ArtistsTable.name],
-        artistImageUrl = this[ArtistsTable.imageUrl],
-        albumName = this.getOrNull(AlbumsTable.name),
-        favoritedAt = this[UserSongFavoritesTable.createdAt],
+            createdAt = this[SongsTable.createdAt],
+            updatedAt = this[SongsTable.updatedAt],
+            releaseAt = this[SongsTable.releaseAt],
+            hasVideo = this[SongsTable.cloudinaryVideoPublicId] != null,
     )
 }
 

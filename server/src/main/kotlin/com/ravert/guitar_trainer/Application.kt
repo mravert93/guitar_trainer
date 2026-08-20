@@ -6,12 +6,15 @@ import com.ravert.guitar_trainer.db.DatabaseFactory
 import com.ravert.guitar_trainer.db.FavoritesRepository
 import com.ravert.guitar_trainer.db.LibraryRepository
 import com.ravert.guitar_trainer.db.TabRequestsRepository
+import com.ravert.guitar_trainer.cloudinary.CloudinaryService
 import com.ravert.guitar_trainer.routing.configureAdminRoutes
 import com.ravert.guitar_trainer.routing.configureAuthRoutes
 import com.ravert.guitar_trainer.routing.configureBetaFeedbackRoutes
 import com.ravert.guitar_trainer.routing.configureDonationRouting
+import com.ravert.guitar_trainer.routing.configureEarlyAccessRoutes
 import com.ravert.guitar_trainer.routing.configureFavoriteRoutes
 import com.ravert.guitar_trainer.routing.configureImportRoutes
+import com.ravert.guitar_trainer.routing.configureNewestTabsRoutes
 import com.ravert.guitar_trainer.routing.configureTabRequestRoutes
 import com.ravert.guitar_trainer.routing.configureYoutubeMemberRoutes
 import io.ktor.client.HttpClient
@@ -71,6 +74,7 @@ fun Application.module() {
     val authRepository = AuthRepository()
     val favoritesRepository = FavoritesRepository()
     val tabRequestsRepository = TabRequestsRepository()
+    val cloudinaryService = CloudinaryService.fromEnvironment()
 
     val httpClient = HttpClient(CIO) {
         followRedirects = true
@@ -89,8 +93,10 @@ fun Application.module() {
 
 
     configureAuthRoutes(authRepository, httpClient)
-    configureAdminRoutes(httpClient, repo)
-    configureImportRoutes(httpClient, repo)
+    configureAdminRoutes(httpClient, repo, authRepository)
+    configureNewestTabsRoutes(repo)
+    configureEarlyAccessRoutes(authRepository, repo, cloudinaryService, httpClient)
+    configureImportRoutes(httpClient, repo, authRepository)
     configureDonationRouting(authRepository)
     configureFavoriteRoutes(authRepository, favoritesRepository)
     configureTabRequestRoutes(authRepository, tabRequestsRepository)
