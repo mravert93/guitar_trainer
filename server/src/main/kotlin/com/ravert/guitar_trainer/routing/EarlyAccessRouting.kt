@@ -33,6 +33,8 @@ data class EarlyAccessTabDto(
     val artistImageUrl: String? = null,
     val albumName: String? = null,
     val albumImageUrl: String? = null,
+    val releaseAt: Long,
+    val hasVideo: Boolean,
 )
 
 @Serializable
@@ -272,6 +274,8 @@ private fun NewestTabRecord.toPublicEarlyAccessDto() = EarlyAccessTabDto(
     artistImageUrl = artistImageUrl,
     albumName = albumName,
     albumImageUrl = albumImageUrl,
+    releaseAt = requireNotNull(song.releaseAt) { "Upcoming tab is missing its release date" },
+    hasVideo = song.hasVideo,
 )
 
 private fun SongVideoRecord.toAdminResponse() = SongEarlyAccessSettingsResponse(
