@@ -11,5 +11,9 @@ data class SongTabDetail(
     val tuning: String,
     val capo: String,
     val chords: String,
-    val technique: String
+    val technique: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val releaseAt: Long?,
+    val isEarlyAccess: Boolean,
 )

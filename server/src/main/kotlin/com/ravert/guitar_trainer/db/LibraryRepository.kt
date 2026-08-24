@@ -475,6 +475,10 @@ class LibraryRepository {
                     capo = row[SongsTable.capo].orEmpty(),
                     chords = row[SongsTable.chords].orEmpty(),
                     technique = row[SongsTable.technique].orEmpty(),
+                    createdAt = row[SongsTable.createdAt],
+                    updatedAt = row[SongsTable.updatedAt],
+                    releaseAt = row[SongsTable.releaseAt],
+                    isEarlyAccess = row[SongsTable.releaseAt]?.let { it > now } == true,
                 )
             }
     }
