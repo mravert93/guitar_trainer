@@ -12,6 +12,8 @@ data class CloudinaryUploadSignature(
     val publicId: String,
     val uploadUrl: String,
     val deliveryType: String,
+    val overwrite: Boolean,
+    val invalidate: Boolean,
 )
 
 data class CloudinaryDestroySignature(
@@ -31,9 +33,11 @@ class CloudinaryService private constructor(
 ) {
     fun createVideoUploadSignature(songUuid: UUID, timestamp: Long = System.currentTimeMillis() / 1000): CloudinaryUploadSignature {
         val publicId = expectedVideoPublicId(songUuid)
+        val overwrite = true
+        val invalidate = true
         val parameters = sortedMapOf(
-            "invalidate" to "true",
-            "overwrite" to "true",
+            "invalidate" to invalidate.toString(),
+            "overwrite" to overwrite.toString(),
             "public_id" to publicId,
             "timestamp" to timestamp.toString(),
             "type" to AuthenticatedDeliveryType,
@@ -48,6 +52,8 @@ class CloudinaryService private constructor(
             publicId = publicId,
             uploadUrl = "https://api.cloudinary.com/v1_1/$cloudName/video/upload",
             deliveryType = AuthenticatedDeliveryType,
+            overwrite = overwrite,
+            invalidate = invalidate,
         )
     }
 

@@ -19,6 +19,8 @@ class CloudinaryServiceTest {
         assertEquals("key", upload.apiKey)
         assertEquals("dct-tutorials/premium-tabs/$songUuid", upload.publicId)
         assertEquals("authenticated", upload.deliveryType)
+        assertEquals(true, upload.overwrite)
+        assertEquals(true, upload.invalidate)
         assertEquals("d3897785802e7107acca6c9648a618f48169b202", upload.signature)
         assertEquals("https://api.cloudinary.com/v1_1/demo/video/upload", upload.uploadUrl)
     }

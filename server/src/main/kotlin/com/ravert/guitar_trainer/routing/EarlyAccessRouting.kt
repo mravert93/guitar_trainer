@@ -58,8 +58,8 @@ data class CloudinaryVideoUploadSignatureResponse(
     val uploadUrl: String,
     val resourceType: String = "video",
     val type: String,
-    val overwrite: Boolean = true,
-    val invalidate: Boolean = true,
+    val overwrite: Boolean,
+    val invalidate: Boolean,
 )
 
 @Serializable
@@ -171,6 +171,8 @@ fun Application.configureEarlyAccessRoutes(
                     publicId = upload.publicId,
                     uploadUrl = upload.uploadUrl,
                     type = upload.deliveryType,
+                    overwrite = upload.overwrite,
+                    invalidate = upload.invalidate,
                 )
             )
         }
