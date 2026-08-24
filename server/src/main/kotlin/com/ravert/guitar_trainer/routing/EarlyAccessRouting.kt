@@ -94,14 +94,8 @@ fun Application.configureEarlyAccessRoutes(
 ) {
     routing {
         get("/early-access/tabs") {
-            val user = call.requireUser(authRepository)
-                ?: return@get call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
-            if (!authRepository.userHasPremium(user.uuid)) {
-                return@get call.respond(HttpStatusCode.Forbidden, "Premium access required")
-            }
-
-            val tabs = libraryRepository.getUpcomingTabs().map(NewestTabRecord::toEarlyAccessDto)
-            call.response.headers.append(HttpHeaders.CacheControl, "private, no-store")
+            val tabs = libraryRepository.getUpcomingTabs().map(NewestTabRecord::toPublicEarlyAccessDto)
+            call.response.headers.append(HttpHeaders.CacheControl, "public, max-age=60")
             call.respond(EarlyAccessTabsResponse(tabs))
         }
 
@@ -270,8 +264,8 @@ internal suspend fun ApplicationCall.requireSongAccess(song: Song, authRepositor
     return true
 }
 
-private fun NewestTabRecord.toEarlyAccessDto() = EarlyAccessTabDto(
-    song = song,
+private fun NewestTabRecord.toPublicEarlyAccessDto() = EarlyAccessTabDto(
+    song = song.copy(docUrl = ""),
     artistName = artistName,
     artistImageUrl = artistImageUrl,
     albumName = albumName,
