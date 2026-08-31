@@ -24,10 +24,25 @@ in your IDE’s toolbar or run it directly from the terminal:
   ```shell
   ./gradlew :server:run
   ```
+
 - on Windows
   ```shell
   .\gradlew.bat :server:run
   ```
+
+### Stripe Membership Prices
+
+Membership checkout uses two fixed monthly Stripe Prices. Create the products and recurring Prices
+in the same Stripe mode as `STRIPE_SECRET_KEY`, then configure the backend with:
+
+```shell
+STRIPE_PREMIUM_PRICE_ID=price_...       # $2.99/month
+STRIPE_PREMIUM_PLUS_PRICE_ID=price_...  # $4.99/month
+```
+
+The existing `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `APP_PUBLIC_URL` variables are also
+required. Configure the Stripe Billing Portal to allow customers to switch between these two Prices
+if plan changes should be available through the account page.
 
 ### Build and Run Web Application
 

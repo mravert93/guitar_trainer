@@ -96,6 +96,7 @@ object UserEntitlementsTable : Table("user_entitlements") {
     val endsAt = long("ends_at").nullable()
     val sourceExternalId = text("source_external_id").nullable()
     val sourceLabel = text("source_label").nullable()
+    val membershipTier = text("membership_tier").default(MembershipTier.PREMIUM.apiValue)
     val createdAt = long("created_at")
     val updatedAt = long("updated_at")
 

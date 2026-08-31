@@ -1,6 +1,7 @@
 package com.ravert.guitar_trainer.routing
 
 import com.ravert.guitar_trainer.db.AuthRepository
+import com.ravert.guitar_trainer.db.MembershipTier
 import com.ravert.guitar_trainer.db.UserRecord
 import com.stripe.Stripe
 import com.stripe.exception.SignatureVerificationException
@@ -24,16 +25,14 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import kotlinx.serialization.Serializable
 import java.util.UUID
-import kotlin.math.roundToLong
 
 @Serializable
-data class CreateDonationSessionRequest(
-    val amountDollars: Double,
-    val frequency: String,
+data class CreateMembershipSessionRequest(
+    val tier: String,
 )
 
 @Serializable
-data class CreateDonationSessionResponse(
+data class CreateMembershipSessionResponse(
     val url: String,
 )
 
@@ -51,6 +50,10 @@ fun Application.configureDonationRouting(authRepository: AuthRepository) {
     val secretKey = System.getenv("STRIPE_SECRET_KEY")
     val webhookSecret = System.getenv("STRIPE_WEBHOOK_SECRET")
     val publicUrl = System.getenv("APP_PUBLIC_URL")
+    val membershipPrices = StripeMembershipPrices(
+        premiumPriceId = System.getenv("STRIPE_PREMIUM_PRICE_ID"),
+        premiumPlusPriceId = System.getenv("STRIPE_PREMIUM_PLUS_PRICE_ID"),
+    )
 
     Stripe.apiKey = secretKey
 
@@ -65,22 +68,22 @@ fun Application.configureDonationRouting(authRepository: AuthRepository) {
 
             val user = call.requireUser(authRepository)
                 ?: return@post call.respond(HttpStatusCode.Unauthorized, "Unauthorized")
-            val req = call.receive<CreateDonationSessionRequest>()
-
-            if (req.amountDollars.isNaN() || req.amountDollars <= 0.0) {
-                return@post call.respond(HttpStatusCode.BadRequest, "Invalid amount")
-            }
-
-            val amountCents = (req.amountDollars * 100.0).roundToLong()
-            if (amountCents < 100) {
-                return@post call.respond(HttpStatusCode.BadRequest, "Minimum donation is $1")
-            }
-
-            val frequency = req.frequency.trim().lowercase()
-            val isMonthly = frequency == "monthly"
-            val isOneTime = frequency == "one-time" || frequency == "one_time" || frequency == "once"
-            if (!isMonthly && !isOneTime) {
-                return@post call.respond(HttpStatusCode.BadRequest, "Unsupported donation frequency")
+            val req = call.receive<CreateMembershipSessionRequest>()
+            val membershipTier = MembershipTier.fromApiValue(req.tier)
+                ?: return@post call.respond(HttpStatusCode.BadRequest, "Unsupported membership tier")
+            val priceId = membershipPrices.priceIdFor(membershipTier)
+                ?: return@post call.respond(
+                    HttpStatusCode.InternalServerError,
+                    "Stripe price is not configured for ${membershipTier.apiValue}",
+                )
+            val existingStripeCustomer = authRepository.findStripeCustomerByUserUuid(user.uuid)
+            if (existingStripeCustomer?.stripeSubscriptionId != null &&
+                existingStripeCustomer.subscriptionStatus in ACTIVE_STRIPE_SUBSCRIPTION_STATUSES
+            ) {
+                return@post call.respond(
+                    HttpStatusCode.Conflict,
+                    "You already have a Stripe membership. Manage or change it from your account.",
+                )
             }
 
             val stripeCustomerId = getOrCreateStripeCustomer(authRepository, user, nowMillis())
@@ -88,12 +91,12 @@ fun Application.configureDonationRouting(authRepository: AuthRepository) {
                 publicUrl = publicUrl,
                 user = user,
                 stripeCustomerId = stripeCustomerId,
-                amountCents = amountCents,
-                isMonthly = isMonthly,
+                priceId = priceId,
+                membershipTier = membershipTier,
             )
             val session = Session.create(params)
 
-            call.respond(CreateDonationSessionResponse(session.url))
+            call.respond(CreateMembershipSessionResponse(session.url))
         }
 
         post("/stripe/create-billing-portal-session") {
@@ -139,7 +142,7 @@ fun Application.configureDonationRouting(authRepository: AuthRepository) {
                 return@post call.respond(SuccessResponse(success = true))
             }
 
-            processStripeWebhookEvent(authRepository, event)
+            processStripeWebhookEvent(authRepository, event, membershipPrices)
             authRepository.recordStripeWebhookEvent(event.id, event.type, nowMillis())
             call.respond(SuccessResponse(success = true))
         }
@@ -180,74 +183,51 @@ private fun buildCheckoutSessionParams(
     publicUrl: String,
     user: UserRecord,
     stripeCustomerId: String,
-    amountCents: Long,
-    isMonthly: Boolean,
+    priceId: String,
+    membershipTier: MembershipTier,
 ): SessionCreateParams {
-    val builder = SessionCreateParams.builder()
-        .setMode(if (isMonthly) SessionCreateParams.Mode.SUBSCRIPTION else SessionCreateParams.Mode.PAYMENT)
+    return SessionCreateParams.builder()
+        .setMode(SessionCreateParams.Mode.SUBSCRIPTION)
         .setCustomer(stripeCustomerId)
         .setClientReferenceId(user.uuid.toString())
-        .setSuccessUrl("$publicUrl/donations/success?session_id={CHECKOUT_SESSION_ID}")
-        .setCancelUrl("$publicUrl/donations/canceled=1")
+        .setSuccessUrl("${publicUrl.trimEnd('/')}/memberships/success?session_id={CHECKOUT_SESSION_ID}")
+        .setCancelUrl("${publicUrl.trimEnd('/')}/memberships?canceled=1")
         .addPaymentMethodType(SessionCreateParams.PaymentMethodType.CARD)
         .putMetadata("userUuid", user.uuid.toString())
-        .putMetadata("source", "donation")
+        .putMetadata("source", "membership")
+        .putMetadata("membershipTier", membershipTier.apiValue)
         .addLineItem(
             SessionCreateParams.LineItem.builder()
                 .setQuantity(1L)
-                .setPriceData(
-                    SessionCreateParams.LineItem.PriceData.builder()
-                        .setCurrency("usd")
-                        .setUnitAmount(amountCents)
-                        .setProductData(
-                            SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                                .setName(if (isMonthly) "DCT Monthly Donation" else "DCT One-Time Donation")
-                                .build()
-                        )
-                        .apply {
-                            if (isMonthly) {
-                                setRecurring(
-                                    SessionCreateParams.LineItem.PriceData.Recurring.builder()
-                                        .setInterval(SessionCreateParams.LineItem.PriceData.Recurring.Interval.MONTH)
-                                        .build()
-                                )
-                            }
-                        }
-                        .build()
-                )
+                .setPrice(priceId)
                 .build()
         )
-
-    if (isMonthly) {
-        builder.setSubscriptionData(
+        .setSubscriptionData(
             SessionCreateParams.SubscriptionData.builder()
                 .putMetadata("userUuid", user.uuid.toString())
-                .putMetadata("source", "donation")
+                .putMetadata("source", "membership")
+                .putMetadata("membershipTier", membershipTier.apiValue)
                 .build()
         )
-    } else {
-        builder.setInvoiceCreation(
-            SessionCreateParams.InvoiceCreation.builder()
-                .setEnabled(true)
-                .build()
-        )
-    }
-
-    return builder.build()
+        .build()
 }
 
-private fun processStripeWebhookEvent(authRepository: AuthRepository, event: Event) {
+private fun processStripeWebhookEvent(
+    authRepository: AuthRepository,
+    event: Event,
+    membershipPrices: StripeMembershipPrices,
+) {
     when (event.type) {
         "checkout.session.completed" -> {
             val session = event.stripeObject() as? Session ?: return
             if (session.mode != "subscription") return
-            handleCheckoutSessionCompleted(authRepository, session)
+            handleCheckoutSessionCompleted(authRepository, session, membershipPrices)
         }
 
         "customer.subscription.created",
         "customer.subscription.updated" -> {
             val subscription = event.stripeObject() as? Subscription ?: return
-            handleSubscriptionState(authRepository, subscription)
+            handleSubscriptionState(authRepository, subscription, membershipPrices)
         }
 
         "customer.subscription.deleted" -> {
@@ -259,7 +239,7 @@ private fun processStripeWebhookEvent(authRepository: AuthRepository, event: Eve
         "invoice.paid" -> {
             val invoice = event.stripeObject() as? Invoice ?: return
             val subscription = invoice.subscription?.let { Subscription.retrieve(it) } ?: return
-            handleSubscriptionState(authRepository, subscription)
+            handleSubscriptionState(authRepository, subscription, membershipPrices)
         }
 
         "invoice.payment_failed" -> {
@@ -270,7 +250,11 @@ private fun processStripeWebhookEvent(authRepository: AuthRepository, event: Eve
     }
 }
 
-private fun handleCheckoutSessionCompleted(authRepository: AuthRepository, session: Session) {
+private fun handleCheckoutSessionCompleted(
+    authRepository: AuthRepository,
+    session: Session,
+    membershipPrices: StripeMembershipPrices,
+) {
     val userUuid = session.metadata?.get("userUuid")?.toUuidOrNull() ?: return
     val stripeCustomerId = session.customer ?: return
     val stripeSubscriptionId = session.subscription
@@ -283,12 +267,17 @@ private fun handleCheckoutSessionCompleted(authRepository: AuthRepository, sessi
         currentPeriodEnd = subscription?.currentPeriodEndMillis(),
         now = nowMillis(),
     )
-    subscription?.let { handleSubscriptionState(authRepository, it) }
+    subscription?.let { handleSubscriptionState(authRepository, it, membershipPrices) }
 }
 
-private fun handleSubscriptionState(authRepository: AuthRepository, subscription: Subscription) {
+private fun handleSubscriptionState(
+    authRepository: AuthRepository,
+    subscription: Subscription,
+    membershipPrices: StripeMembershipPrices,
+) {
     linkStripeSubscription(authRepository, subscription)
     val userUuid = stripeUserUuid(authRepository, subscription) ?: return
+    val membershipTier = subscription.membershipTier(membershipPrices)
 
     when (subscription.status) {
         "active",
@@ -301,6 +290,7 @@ private fun handleSubscriptionState(authRepository: AuthRepository, subscription
                     stripeSubscriptionId = subscription.id,
                     subscriptionStatus = subscription.status,
                     currentPeriodEnd = subscription.currentPeriodEndMillis(),
+                    membershipTier = membershipTier,
                     now = nowMillis(),
                 )
             }
@@ -317,6 +307,7 @@ private fun handleSubscriptionState(authRepository: AuthRepository, subscription
             stripeSubscriptionId = subscription.id,
             subscriptionStatus = subscription.status,
             currentPeriodEnd = subscription.currentPeriodEndMillis(),
+            membershipTier = membershipTier,
             now = nowMillis(),
         )
     }
@@ -356,6 +347,39 @@ private fun Event.stripeObject(): StripeObject? =
 private fun Subscription.isCancelingAtPeriodEnd(): Boolean = cancelAtPeriodEnd == true
 
 private fun Subscription.currentPeriodEndMillis(): Long? = currentPeriodEnd?.times(1000L)
+
+private fun Subscription.membershipTier(membershipPrices: StripeMembershipPrices): MembershipTier {
+    val priceId = items?.data?.firstOrNull()?.price?.id
+    return membershipPrices.tierForPriceId(priceId)
+        ?: MembershipTier.fromApiValue(metadata?.get("membershipTier"))
+        ?: MembershipTier.PREMIUM
+}
+
+private data class StripeMembershipPrices(
+    val premiumPriceId: String?,
+    val premiumPlusPriceId: String?,
+) {
+    fun priceIdFor(tier: MembershipTier): String? = when (tier) {
+        MembershipTier.PREMIUM -> premiumPriceId
+        MembershipTier.PREMIUM_PLUS -> premiumPlusPriceId
+    }?.takeIf { it.isNotBlank() }
+
+    fun tierForPriceId(priceId: String?): MembershipTier? {
+        if (priceId.isNullOrBlank()) return null
+        return when (priceId) {
+            premiumPriceId -> MembershipTier.PREMIUM
+            premiumPlusPriceId -> MembershipTier.PREMIUM_PLUS
+            else -> null
+        }
+    }
+}
+
+private val ACTIVE_STRIPE_SUBSCRIPTION_STATUSES = setOf(
+    "active",
+    "trialing",
+    "past_due",
+    "incomplete",
+)
 
 private fun String.toUuidOrNull(): UUID? =
     try {

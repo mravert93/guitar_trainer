@@ -93,6 +93,7 @@ object DatabaseFactory {
                     ends_at bigint NULL,
                     source_external_id text NULL,
                     source_label text NULL,
+                    membership_tier text NOT NULL DEFAULT 'premium',
                     created_at bigint NOT NULL,
                     updated_at bigint NOT NULL
                 )
@@ -152,6 +153,7 @@ object DatabaseFactory {
             exec("CREATE INDEX IF NOT EXISTS idx_user_sessions_user_uuid ON user_sessions(user_uuid)")
             exec("CREATE INDEX IF NOT EXISTS idx_user_entitlements_user_uuid ON user_entitlements(user_uuid)")
             exec("CREATE INDEX IF NOT EXISTS idx_user_entitlements_status ON user_entitlements(status)")
+            exec("ALTER TABLE user_entitlements ADD COLUMN IF NOT EXISTS membership_tier text NOT NULL DEFAULT 'premium'")
             exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email)")
             exec("CREATE INDEX IF NOT EXISTS idx_users_youtube_channel_id ON users(youtube_channel_id)")
             exec("CREATE INDEX IF NOT EXISTS idx_users_normalized_youtube_username ON users(normalized_youtube_username)")

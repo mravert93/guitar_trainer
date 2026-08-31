@@ -64,6 +64,7 @@ data class UserEntitlementRecord(
     val endsAt: Long?,
     val sourceExternalId: String?,
     val sourceLabel: String?,
+    val membershipTier: String,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -175,6 +176,25 @@ class AuthRepository {
             .empty()
     }
 
+    suspend fun userMembershipTier(userUuid: UUID): MembershipTier? = transaction {
+        val now = System.currentTimeMillis()
+        val activeTiers = UserEntitlementsTable
+            .selectAll()
+            .where {
+                (UserEntitlementsTable.userUuid eq userUuid) and
+                    (UserEntitlementsTable.status eq "active") and
+                    (UserEntitlementsTable.startsAt lessEq now) and
+                    (UserEntitlementsTable.endsAt.isNull() or (UserEntitlementsTable.endsAt greater now))
+            }
+            .mapNotNull { MembershipTier.fromApiValue(it[UserEntitlementsTable.membershipTier]) }
+
+        when {
+            MembershipTier.PREMIUM_PLUS in activeTiers -> MembershipTier.PREMIUM_PLUS
+            activeTiers.isNotEmpty() -> MembershipTier.PREMIUM
+            else -> null
+        }
+    }
+
     fun findEntitlementsByUserUuid(userUuid: UUID): List<UserEntitlementRecord> = transaction {
         UserEntitlementsTable
             .selectAll()
@@ -193,6 +213,7 @@ class AuthRepository {
             it[UserEntitlementsTable.endsAt] = endsAt
             it[sourceExternalId] = null
             it[UserEntitlementsTable.sourceLabel] = sourceLabel
+            it[membershipTier] = MembershipTier.PREMIUM.apiValue
             it[createdAt] = now
             it[updatedAt] = now
         }
@@ -280,6 +301,7 @@ class AuthRepository {
         stripeSubscriptionId: String,
         subscriptionStatus: String?,
         currentPeriodEnd: Long?,
+        membershipTier: MembershipTier,
         now: Long,
     ) = transaction {
         upsertEntitlement(
@@ -290,6 +312,7 @@ class AuthRepository {
             startsAt = now,
             endsAt = currentPeriodEnd,
             sourceLabel = subscriptionStatus,
+            membershipTier = membershipTier,
             now = now,
         )
     }
@@ -299,6 +322,7 @@ class AuthRepository {
         stripeSubscriptionId: String,
         subscriptionStatus: String?,
         currentPeriodEnd: Long?,
+        membershipTier: MembershipTier,
         now: Long,
     ) = transaction {
         val existing = findEntitlement("stripe", stripeSubscriptionId)
@@ -311,12 +335,14 @@ class AuthRepository {
                 startsAt = now,
                 endsAt = currentPeriodEnd,
                 sourceLabel = subscriptionStatus,
+                membershipTier = membershipTier,
                 now = now,
             )
         } else {
             UserEntitlementsTable.update({ UserEntitlementsTable.uuid eq existing[UserEntitlementsTable.uuid] }) {
                 it[status] = "active"
                 it[sourceLabel] = subscriptionStatus
+                it[UserEntitlementsTable.membershipTier] = membershipTier.apiValue
                 it[updatedAt] = now
             }
         }
@@ -579,6 +605,7 @@ class AuthRepository {
         endsAt = this[UserEntitlementsTable.endsAt],
         sourceExternalId = this[UserEntitlementsTable.sourceExternalId],
         sourceLabel = this[UserEntitlementsTable.sourceLabel],
+        membershipTier = this[UserEntitlementsTable.membershipTier],
         createdAt = this[UserEntitlementsTable.createdAt],
         updatedAt = this[UserEntitlementsTable.updatedAt],
     )
@@ -600,6 +627,7 @@ class AuthRepository {
         startsAt: Long,
         endsAt: Long?,
         sourceLabel: String?,
+        membershipTier: MembershipTier = MembershipTier.PREMIUM,
         now: Long,
     ) {
         val existing = UserEntitlementsTable
@@ -621,6 +649,7 @@ class AuthRepository {
                 it[UserEntitlementsTable.endsAt] = endsAt
                 it[UserEntitlementsTable.sourceExternalId] = sourceExternalId
                 it[UserEntitlementsTable.sourceLabel] = sourceLabel
+                it[UserEntitlementsTable.membershipTier] = membershipTier.apiValue
                 it[createdAt] = now
                 it[updatedAt] = now
             }
@@ -630,6 +659,7 @@ class AuthRepository {
                 it[UserEntitlementsTable.startsAt] = startsAt
                 it[UserEntitlementsTable.endsAt] = endsAt
                 it[UserEntitlementsTable.sourceLabel] = sourceLabel
+                it[UserEntitlementsTable.membershipTier] = membershipTier.apiValue
                 it[updatedAt] = now
             }
         }

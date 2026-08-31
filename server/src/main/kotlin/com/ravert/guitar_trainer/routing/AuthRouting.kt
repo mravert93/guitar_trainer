@@ -57,6 +57,7 @@ data class AuthUserDto(
     val youtubeChannelId: String? = null,
     val youtubeDisplayName: String? = null,
     val hasPremium: Boolean,
+    val membershipTier: String? = null,
 )
 
 @Serializable
@@ -108,6 +109,7 @@ data class AdminUserSummaryDto(
     val youtubeChannelId: String? = null,
     val youtubeDisplayName: String? = null,
     val hasPremium: Boolean,
+    val membershipTier: String? = null,
     val premiumSources: List<String>,
     val createdAt: Long,
     val updatedAt: Long,
@@ -131,6 +133,7 @@ data class AdminEntitlementDto(
     val endsAt: Long? = null,
     val sourceExternalId: String? = null,
     val sourceLabel: String? = null,
+    val membershipTier: String,
     val createdAt: Long,
     val updatedAt: Long,
 )
@@ -469,14 +472,17 @@ fun ApplicationCall.clearSessionCookie() {
 }
 
 suspend fun AuthRepository.authResponse(user: UserRecord) = AuthResponse(
-    user = AuthUserDto(
-        uuid = user.uuid.toString(),
-        email = user.email,
-        youtubeUsername = user.youtubeUsername,
-        youtubeChannelId = user.youtubeChannelId,
-        youtubeDisplayName = user.youtubeDisplayName,
-        hasPremium = userHasPremium(user.uuid),
-    )
+    user = userMembershipTier(user.uuid).let { membershipTier ->
+        AuthUserDto(
+            uuid = user.uuid.toString(),
+            email = user.email,
+            youtubeUsername = user.youtubeUsername,
+            youtubeChannelId = user.youtubeChannelId,
+            youtubeDisplayName = user.youtubeDisplayName,
+            hasPremium = membershipTier != null,
+            membershipTier = membershipTier?.apiValue,
+        )
+    }
 )
 
 private suspend fun AuthRepository.adminUserSummaryDto(user: UserRecord): AdminUserSummaryDto {
@@ -487,6 +493,7 @@ private suspend fun AuthRepository.adminUserSummaryDto(user: UserRecord): AdminU
         .map { it.source }
         .distinct()
         .sorted()
+    val membershipTier = userMembershipTier(user.uuid)
 
     return AdminUserSummaryDto(
         uuid = user.uuid.toString(),
@@ -494,7 +501,8 @@ private suspend fun AuthRepository.adminUserSummaryDto(user: UserRecord): AdminU
         youtubeUsername = user.youtubeUsername,
         youtubeChannelId = user.youtubeChannelId,
         youtubeDisplayName = user.youtubeDisplayName,
-        hasPremium = userHasPremium(user.uuid),
+        hasPremium = membershipTier != null,
+        membershipTier = membershipTier?.apiValue,
         premiumSources = activeSources,
         createdAt = user.createdAt,
         updatedAt = user.updatedAt,
@@ -524,6 +532,7 @@ private fun UserEntitlementRecord.toAdminEntitlementDto(now: Long) = AdminEntitl
     endsAt = endsAt,
     sourceExternalId = sourceExternalId,
     sourceLabel = sourceLabel,
+    membershipTier = membershipTier,
     createdAt = createdAt,
     updatedAt = updatedAt,
 )
