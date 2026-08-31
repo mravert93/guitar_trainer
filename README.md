@@ -44,6 +44,16 @@ The existing `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `APP_PUBLIC_URL` 
 required. Configure the Stripe Billing Portal to allow customers to switch between these two Prices
 if plan changes should be available through the account page.
 
+### Monthly Tab Links
+
+The production server creates one public tab collection link per month and stores it in Postgres.
+Each collection uses the start of that month as a fixed cutoff, so later songs never appear in an
+older collection. `APP_PUBLIC_URL` is used to build the shareable frontend URL.
+
+The scheduler defaults to the `America/Phoenix` time zone. It can be changed with
+`MONTHLY_TAB_LINK_TIME_ZONE`, or enabled outside production with
+`MONTHLY_TAB_LINKS_ENABLED=true`.
+
 ### Build and Run Web Application
 
 To build and run the development version of the web app, use the run configuration from the run widget

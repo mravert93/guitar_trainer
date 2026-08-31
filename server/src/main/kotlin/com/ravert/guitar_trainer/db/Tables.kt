@@ -191,3 +191,14 @@ object YoutubeMemberCountSnapshotsTable : Table("youtube_member_count_snapshots"
 
     override val primaryKey = PrimaryKey(snapshotDate)
 }
+
+object MonthlyTabDownloadLinksTable : Table("monthly_tab_download_links") {
+    val uuid = uuid("uuid")
+    val monthKey = text("month_key")
+    val publicToken = text("public_token")
+    val publicUrl = text("public_url")
+    val cutoffAt = long("cutoff_at")
+    val createdAt = long("created_at")
+
+    override val primaryKey = PrimaryKey(uuid)
+}

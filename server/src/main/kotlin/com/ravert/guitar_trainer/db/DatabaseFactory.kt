@@ -149,6 +149,18 @@ object DatabaseFactory {
                 )
                 """.trimIndent()
             )
+            exec(
+                """
+                CREATE TABLE IF NOT EXISTS monthly_tab_download_links (
+                    uuid uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    month_key text NOT NULL UNIQUE,
+                    public_token text NOT NULL UNIQUE,
+                    public_url text NOT NULL,
+                    cutoff_at bigint NOT NULL,
+                    created_at bigint NOT NULL
+                )
+                """.trimIndent()
+            )
             exec("CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(session_token_hash)")
             exec("CREATE INDEX IF NOT EXISTS idx_user_sessions_user_uuid ON user_sessions(user_uuid)")
             exec("CREATE INDEX IF NOT EXISTS idx_user_entitlements_user_uuid ON user_entitlements(user_uuid)")
@@ -160,6 +172,9 @@ object DatabaseFactory {
             exec("CREATE INDEX IF NOT EXISTS idx_users_normalized_youtube_display_name ON users(normalized_youtube_display_name)")
             exec("CREATE INDEX IF NOT EXISTS idx_stripe_customers_user_uuid ON stripe_customers(user_uuid)")
             exec("CREATE INDEX IF NOT EXISTS idx_stripe_customers_subscription_id ON stripe_customers(stripe_subscription_id)")
+            exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_tab_download_links_month_key ON monthly_tab_download_links(month_key)")
+            exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_monthly_tab_download_links_public_token ON monthly_tab_download_links(public_token)")
+            exec("CREATE INDEX IF NOT EXISTS idx_monthly_tab_download_links_cutoff_at ON monthly_tab_download_links(cutoff_at)")
             exec(
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_youtube_members_youtube_channel_id
@@ -186,7 +201,8 @@ object DatabaseFactory {
                 StripeCustomersTable,
                 StripeWebhookEventsTable,
                 YoutubeMembersTable,
-                YoutubeMemberCountSnapshotsTable
+                YoutubeMemberCountSnapshotsTable,
+                MonthlyTabDownloadLinksTable
             )
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS tuning text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS capo text NULL")
