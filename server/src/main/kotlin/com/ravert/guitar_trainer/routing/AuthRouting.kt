@@ -2,6 +2,7 @@ package com.ravert.guitar_trainer.routing
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.ravert.guitar_trainer.db.AuthRepository
+import com.ravert.guitar_trainer.db.MembershipTier
 import com.ravert.guitar_trainer.db.StripeCustomerRecord
 import com.ravert.guitar_trainer.db.UserEntitlementRecord
 import com.ravert.guitar_trainer.db.UserRecord
@@ -80,6 +81,7 @@ data class ChangePasswordRequest(
 data class ManualPremiumGrantRequest(
     val sourceLabel: String? = null,
     val endsAt: Long? = null,
+    val membershipTier: String? = null,
 )
 
 @Serializable
@@ -404,7 +406,19 @@ fun Application.configureAuthRoutes(authRepository: AuthRepository, httpClient: 
                 ?: return@post call.respond(HttpStatusCode.NotFound, "User not found")
 
             val req = call.receive<ManualPremiumGrantRequest>()
-            authRepository.grantManualPremium(userUuid, req.sourceLabel, req.endsAt, nowMillis())
+            val membershipTier = if (req.membershipTier == null) {
+                MembershipTier.PREMIUM
+            } else {
+                MembershipTier.fromApiValue(req.membershipTier)
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, "Unsupported membership tier")
+            }
+            authRepository.grantManualPremium(
+                userUuid = userUuid,
+                sourceLabel = req.sourceLabel,
+                endsAt = req.endsAt,
+                membershipTier = membershipTier,
+                now = nowMillis(),
+            )
             call.respond(authRepository.adminUserDetailResponse(user))
         }
 

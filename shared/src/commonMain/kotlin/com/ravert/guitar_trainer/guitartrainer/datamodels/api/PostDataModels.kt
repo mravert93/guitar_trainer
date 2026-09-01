@@ -36,6 +36,7 @@ data class CreateSongRequest(
     val lengthSeconds: Int,
     val bpm: Int,
     val docUrl: String,
+    val youtubeLink: String? = null,
     val tuning: String? = null,
     val capo: String? = null,
     val chords: String? = null,

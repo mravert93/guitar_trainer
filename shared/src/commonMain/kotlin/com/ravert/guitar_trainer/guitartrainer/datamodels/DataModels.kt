@@ -26,6 +26,7 @@ data class Song(
     val lengthSeconds: Int, // Seconds
     val bpm: Int,
     val docUrl: String,
+    val youtubeLink: String? = null,
     val tuning: String? = null,
     val capo: String? = null,
     val chords: String? = null,

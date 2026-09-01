@@ -116,6 +116,7 @@ class FavoritesRepository {
             lengthSeconds = this[SongsTable.lengthSeconds],
             bpm = this[SongsTable.bpm],
             docUrl = this[SongsTable.docUrl],
+            youtubeLink = this[SongsTable.youtubeLink],
             tuning = this[SongsTable.tuning],
             capo = this[SongsTable.capo],
             chords = this[SongsTable.chords],

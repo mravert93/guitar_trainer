@@ -28,6 +28,7 @@ object SongsTable : Table("songs") {
     val lengthSeconds = integer("length_seconds")
     val bpm = integer("bpm")
     val docUrl = text("doc_url")
+    val youtubeLink = text("youtube_link").nullable()
     val tuning = text("tuning").nullable()
     val capo = text("capo").nullable()
     val chords = text("chords").nullable()

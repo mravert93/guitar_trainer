@@ -203,7 +203,22 @@ class AuthRepository {
             .map { it.toUserEntitlementRecord() }
     }
 
-    fun grantManualPremium(userUuid: UUID, sourceLabel: String?, endsAt: Long?, now: Long) = transaction {
+    fun grantManualPremium(
+        userUuid: UUID,
+        sourceLabel: String?,
+        endsAt: Long?,
+        membershipTier: MembershipTier = MembershipTier.PREMIUM,
+        now: Long,
+    ) = transaction {
+        UserEntitlementsTable.update({
+            (UserEntitlementsTable.userUuid eq userUuid) and
+                (UserEntitlementsTable.sourceValue eq "manual") and
+                (UserEntitlementsTable.status eq "active")
+        }) {
+            it[status] = "inactive"
+            it[updatedAt] = now
+        }
+
         UserEntitlementsTable.insert {
             it[uuid] = UUID.randomUUID()
             it[UserEntitlementsTable.userUuid] = userUuid
@@ -213,7 +228,7 @@ class AuthRepository {
             it[UserEntitlementsTable.endsAt] = endsAt
             it[sourceExternalId] = null
             it[UserEntitlementsTable.sourceLabel] = sourceLabel
-            it[membershipTier] = MembershipTier.PREMIUM.apiValue
+            it[UserEntitlementsTable.membershipTier] = membershipTier.apiValue
             it[createdAt] = now
             it[updatedAt] = now
         }

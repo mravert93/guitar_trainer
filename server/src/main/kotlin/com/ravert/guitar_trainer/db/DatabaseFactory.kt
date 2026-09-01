@@ -208,6 +208,7 @@ object DatabaseFactory {
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS capo text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS chords text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS technique text NULL")
+            exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS youtube_link text NULL")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS created_at bigint NOT NULL DEFAULT 0")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS updated_at bigint NOT NULL DEFAULT 0")
             exec("ALTER TABLE songs ADD COLUMN IF NOT EXISTS release_at bigint NULL")

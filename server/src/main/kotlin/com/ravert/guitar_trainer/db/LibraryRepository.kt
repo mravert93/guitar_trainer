@@ -32,6 +32,7 @@ data class NewSong(
     val lengthSeconds: Int = -1,
     val bpm: Int = -1,
     val docUrl: String,
+    val youtubeLink: String? = null,
     val tuning: String? = null,
     val capo: String? = null,
     val chords: String? = null,
@@ -136,6 +137,7 @@ class LibraryRepository {
             this[SongsTable.bpm] = it.bpm
             this[SongsTable.lengthSeconds] = it.lengthSeconds
             this[SongsTable.docUrl] = it.docUrl
+            this[SongsTable.youtubeLink] = it.youtubeLink
             this[SongsTable.tuning] = it.tuning
             this[SongsTable.capo] = it.capo
             this[SongsTable.chords] = it.chords
@@ -293,6 +295,7 @@ class LibraryRepository {
         lengthSeconds: Int,
         bpm: Int,
         docUrl: String,
+        youtubeLink: String? = null,
         tuning: String? = null,
         capo: String? = null,
         chords: String? = null,
@@ -309,6 +312,7 @@ class LibraryRepository {
                 it[SongsTable.lengthSeconds] = lengthSeconds
                 it[SongsTable.bpm] = bpm
                 it[SongsTable.docUrl] = docUrl
+                it[SongsTable.youtubeLink] = youtubeLink
                 it[SongsTable.tuning] = tuning
                 it[SongsTable.capo] = capo
                 it[SongsTable.chords] = chords
@@ -329,6 +333,7 @@ class LibraryRepository {
                 it[SongsTable.lengthSeconds] = lengthSeconds
                 it[SongsTable.bpm] = bpm
                 it[SongsTable.docUrl] = docUrl
+                it[SongsTable.youtubeLink] = youtubeLink
                 it[SongsTable.tuning] = tuning
                 it[SongsTable.capo] = capo
                 it[SongsTable.chords] = chords
@@ -345,6 +350,7 @@ class LibraryRepository {
                 lengthSeconds = lengthSeconds,
                 bpm = bpm,
                 docUrl = docUrl,
+                youtubeLink = youtubeLink,
                 tuning = tuning,
                 capo = capo,
                 chords = chords,
@@ -574,6 +580,7 @@ class LibraryRepository {
         lengthSeconds = this[SongsTable.lengthSeconds],
         bpm = this[SongsTable.bpm],
         docUrl = this[SongsTable.docUrl],
+        youtubeLink = this[SongsTable.youtubeLink],
         tuning = this[SongsTable.tuning],
         capo = this[SongsTable.capo],
         chords = this[SongsTable.chords],
